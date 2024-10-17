@@ -15,6 +15,12 @@ import (
 //go:embed testdata/eg.flac
 var egFlac []byte
 
+func TestNew(t *testing.T) {
+	path := tmpf(t, egFlac, "eg.flac")
+	_, err := taglib.New(path)
+	nilErr(t, err)
+}
+
 func TestFile(t *testing.T) {
 	path := tmpf(t, egFlac, "eg.flac")
 	f, err := taglib.New(path)

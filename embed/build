@@ -8,7 +8,7 @@ sdk="/opt/wasi-sdk"
 
 cmake \
     -DCMAKE_BUILD_TYPE=Release \
-    -DWASM=ON \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DWITH_ZLIB=OFF \
     -DBUILD_SHARED_LIBS=OFF \
     -DVISIBILITY_HIDDEN=ON \
@@ -19,9 +19,9 @@ cmake \
     "$src"
 
 cmake \
-    --build "$build/bindings/c/" \
-    --target tag_c_wasm
+    --build "$build/bindings/wasm/" \
+    --target taglib_wasm
 
-mv "$build/bindings/c/tag_c_wasm.wasm" tag_c.wasm
+mv "$build/bindings/wasm/taglib_wasm.wasm" taglib.wasm
 
-wasm-opt --strip -c -O3 tag_c.wasm -o tag_c.wasm
+wasm-opt --strip -c -O3 taglib.wasm -o taglib.wasm

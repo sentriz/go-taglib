@@ -33,6 +33,7 @@ func New(path string) (File, error) {
 	if !taglibFileValid(f) {
 		return File{}, ErrInvalidFile
 	}
+	return File{}, nil
 	return File{
 		ptr: f,
 		propPtr: sync.OnceValue(func() uint32 {
