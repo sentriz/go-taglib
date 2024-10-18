@@ -1,1 +1,8 @@
-tmp
+*
+!taglib
+!CMakeLists.txt
+!build
+!embed.go
+!exports.txt
+!taglib_wasm.cpp
+!taglib.wasm

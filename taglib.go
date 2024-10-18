@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"iter"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,8 +19,8 @@ var ErrInvalidFile = fmt.Errorf("invalid file")
 var ErrSavingFile = fmt.Errorf("can't save file")
 
 type File struct {
-	ptr     uint32
-	propPtr func() uint32
+	ptr        uint32
+	properties func() []int
 }
 
 func New(path string) (File, error) {
@@ -33,93 +33,37 @@ func New(path string) (File, error) {
 	if !taglibFileValid(f) {
 		return File{}, ErrInvalidFile
 	}
-	return File{}, nil
 	return File{
 		ptr: f,
-		propPtr: sync.OnceValue(func() uint32 {
+		properties: sync.OnceValue(func() []int {
 			return taglibFileAudioProperties(f)
 		}),
 	}, nil
 }
 
-type FileType int
-
-const (
-	MPEG FileType = iota
-	OggVorbis
-	FLAC
-	MPC
-	OggFlac
-	WavPack
-	Speex
-	TrueAudio
-	MP4
-	ASF
-	AIFF
-	WAV
-	APE
-	IT
-	Mod
-	S3M
-	XM
-	Opus
-	DSF
-	DSDIFF
-)
-
-func NewType(path string, typ FileType) (File, error) {
-	f := taglibFileNewType(path, uint32(typ))
-	if !taglibFileValid(f) {
-		return File{}, ErrInvalidFile
-	}
-	return File{ptr: f}, nil
-}
-
-func (f File) GetTag(key string) []string {
-	return taglibPropertyGet(f.ptr, key)
-}
-
-func (f File) SetTag(key string, vs ...string) {
-	if len(vs) == 0 {
-		taglibPropertyClear(f.ptr, key)
-		return
-	}
-	taglibPropertySet(f.ptr, key, vs[0])
-	for _, v := range vs[1:] {
-		taglibPropertySetAppend(f.ptr, key, v)
-	}
-}
-
-func (f File) IterTagKeys() iter.Seq[string] {
-	return func(yield func(string) bool) {
-		for _, k := range taglibPropertyKeys(f.ptr) {
-			if !yield(k) {
-				break
-			}
+func (f File) ReadTags() map[string][]string {
+	var m = map[string][]string{}
+	for _, row := range taglibFileTags(f.ptr) {
+		k, v, ok := strings.Cut(row, "\t")
+		if !ok {
+			continue
 		}
+		m[k] = append(m[k], v)
 	}
-}
-func (f File) IterTags() iter.Seq2[string, []string] {
-	return func(yield func(string, []string) bool) {
-		for _, k := range taglibPropertyKeys(f.ptr) {
-			if !yield(k, taglibPropertyGet(f.ptr, k)) {
-				break
-			}
-		}
-	}
+	return m
 }
 
 func (f File) Length() time.Duration {
-	return time.Duration(taglibAudioPropertiesLength(f.propPtr())) * time.Second
+	return time.Duration(f.properties()[audioPropertyLengthInMilliseconds]) * time.Millisecond
 }
 func (f File) Bitrate() int {
-	return int(taglibAudioPropertiesBitrate(f.propPtr()))
+	return f.properties()[audioPropertyBitrate]
 }
 func (f File) SampleRate() int {
-	return int(taglibAudioPropertiesSamplerate(f.propPtr()))
+	return f.properties()[audioPropertySampleRate]
 }
 func (f File) Channels() int {
-	return int(taglibAudioPropertiesChannels(f.propPtr()))
+	return f.properties()[audioPropertyChannels]
 }
 
 func (f File) Save() error {
@@ -139,96 +83,36 @@ func taglibFileNew(filename string) uint32 {
 	defer stk.reset()()
 	stk.string(filename)
 	call(&stk, "taglib_file_new")
-	return stk.rint()
-}
-
-func taglibFileNewType(filename string, typ uint32) uint32 {
-	defer stk.reset()()
-	stk.string(filename)
-	stk.int(typ)
-	call(&stk, "taglib_file_new_type")
-	return stk.rint()
+	return stk.getPtr()
 }
 
 func taglibFileValid(file uint32) bool {
 	defer stk.reset()()
 	stk.int(file)
 	call(&stk, "taglib_file_is_valid")
-	return stk.rbool()
+	return stk.getBool()
 }
 
-func taglibPropertyKeys(file uint32) []string {
+func taglibFileTags(file uint32) []string {
 	defer stk.reset()()
 	stk.int(file)
-	call(&stk, "taglib_property_keys")
-	return stk.rstrings()
+	call(&stk, "taglib_file_tags")
+	return stk.getStrings()
 }
 
-func taglibPropertyClear(file uint32, property string) {
-	defer stk.reset()()
-	stk.int(file)
-	stk.string(property)
-	stk.int(0)
-	call(&stk, "taglib_property_set_append")
-}
+const (
+	audioPropertyLengthInMilliseconds = iota
+	audioPropertyChannels
+	audioPropertySampleRate
+	audioPropertyBitrate
+	audioPropertyLen
+)
 
-func taglibPropertySet(file uint32, property string, value string) {
-	defer stk.reset()()
-	stk.int(file)
-	stk.string(property)
-	stk.string(value)
-	call(&stk, "taglib_property_set")
-}
-
-func taglibPropertySetAppend(file uint32, property string, value string) {
-	defer stk.reset()()
-	stk.int(file)
-	stk.string(property)
-	stk.string(value)
-	call(&stk, "taglib_property_set_append")
-}
-
-func taglibPropertyGet(file uint32, property string) []string {
-	defer stk.reset()()
-	stk.int(file)
-	stk.string(property)
-	call(&stk, "taglib_property_get")
-	return stk.rstrings()
-}
-
-func taglibFileAudioProperties(file uint32) uint32 {
+func taglibFileAudioProperties(file uint32) []int {
 	defer stk.reset()()
 	stk.int(file)
 	call(&stk, "taglib_file_audioproperties")
-	return stk.rint()
-}
-
-func taglibAudioPropertiesLength(properties uint32) uint32 {
-	defer stk.reset()()
-	stk.int(properties)
-	call(&stk, "taglib_audioproperties_length")
-	return stk.rint()
-}
-
-func taglibAudioPropertiesBitrate(properties uint32) uint32 {
-	defer stk.reset()()
-	stk.int(properties)
-	call(&stk, "taglib_audioproperties_bitrate")
-	return stk.rint()
-}
-
-func taglibAudioPropertiesSamplerate(properties uint32) uint32 {
-	defer stk.reset()()
-	stk.int(properties)
-	call(&stk, "taglib_audioproperties_samplerate")
-	return stk.rint()
-}
-
-func taglibAudioPropertiesChannels(properties uint32) uint32 {
-	defer stk.reset()()
-	stk.int(properties)
-	call(&stk, "taglib_audioproperties_channels")
-	return stk.rint()
+	return stk.getInts(audioPropertyLen)
 }
 
 func taglibFileFree(file uint32) {
@@ -241,7 +125,7 @@ func taglibFileSave(file uint32) bool {
 	defer stk.reset()()
 	stk.int(file)
 	call(&stk, "taglib_file_save")
-	return stk.rbool()
+	return stk.getBool()
 }
 
 var mstk stack
@@ -250,7 +134,7 @@ func malloc(size uint64) uint32 {
 	defer mstk.reset()()
 	mstk.int(uint32(size))
 	call(&mstk, "malloc")
-	return mstk.rint()
+	return mstk.getPtr()
 }
 
 func free(ptr uint32) {
@@ -306,13 +190,19 @@ func (stk *stack) string(s string) {
 	stk.ptrs = append(stk.ptrs, uint64(ptr))
 }
 
-func (stk *stack) rint() uint32       { return uint32(stk.stack[0]) }
-func (stk *stack) rbool() bool        { return stk.stack[0] == 1 }
-func (stk *stack) rstring() string    { return readString(uint32(stk.stack[0])) }
-func (stk *stack) rstrings() []string { return readStrings(uint32(stk.stack[0])) }
+func (stk *stack) getPtr() uint32        { return uint32(stk.stack[0]) }
+func (stk *stack) getInt() int           { return int(stk.stack[0]) }
+func (stk *stack) getInts(len int) []int { return readInts(uint32(stk.stack[0]), len) }
+func (stk *stack) getBool() bool         { return stk.stack[0] == 1 }
+func (stk *stack) getString() string     { return readString(uint32(stk.stack[0])) }
+func (stk *stack) getStrings() []string  { return readStrings(uint32(stk.stack[0])) }
 
 // readString reads a null terminated string at ptr
 func readString(ptr uint32) string {
+	defer func() {
+		free(ptr)
+	}()
+
 	size := uint32(256)
 	buf, ok := module.Memory().Read(ptr, size)
 	if !ok {
@@ -338,6 +228,10 @@ func readString(ptr uint32) string {
 
 // readString reads a null terminated string array at ptr
 func readStrings(ptr uint32) []string {
+	defer func() {
+		free(ptr)
+	}()
+
 	var strs []string
 	for {
 		stringPtr, ok := module.Memory().ReadUint32Le(ptr)
@@ -352,6 +246,23 @@ func readStrings(ptr uint32) []string {
 		ptr += 4
 	}
 	return strs
+}
+
+// readInts reads a null terminated int array at ptr
+func readInts(ptr uint32, len int) []int {
+	defer func() {
+		free(ptr)
+	}()
+
+	ints := make([]int, 0, len)
+	for i := range len {
+		i, ok := module.Memory().ReadUint32Le(ptr + uint32(4*i))
+		if !ok {
+			panic("memory error")
+		}
+		ints = append(ints, int(i))
+	}
+	return ints
 }
 
 var module api.Module

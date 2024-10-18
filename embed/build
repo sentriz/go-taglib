@@ -2,8 +2,6 @@
 
 set -e
 
-build="tmp"
-src="./taglib"
 sdk="/opt/wasi-sdk"
 
 cmake \
@@ -15,13 +13,8 @@ cmake \
     -DBUILD_TESTING=OFF \
     -DWASI_SDK_PREFIX="$sdk" \
     -DCMAKE_TOOLCHAIN_FILE="$sdk"/share/cmake/wasi-sdk.cmake \
-    -B "$build" \
-    "$src"
+    .
 
-cmake \
-    --build "$build/bindings/wasm/" \
-    --target taglib_wasm
-
-mv "$build/bindings/wasm/taglib_wasm.wasm" taglib.wasm
+cmake --build . --target taglib
 
 wasm-opt --strip -c -O3 taglib.wasm -o taglib.wasm

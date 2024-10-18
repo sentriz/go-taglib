@@ -1,0 +1,10 @@
+--export=malloc
+--export=free
+
+--export=taglib_file_new
+--export=taglib_file_is_valid
+--export=taglib_file_tags
+--export=taglib_file_write_tags
+--export=taglib_file_audioproperties
+--export=taglib_file_save
+--export=taglib_file_free

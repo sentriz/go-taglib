@@ -2,7 +2,6 @@ package taglib_test
 
 import (
 	_ "embed"
-	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,59 +14,24 @@ import (
 //go:embed testdata/eg.flac
 var egFlac []byte
 
-func TestNew(t *testing.T) {
-	path := tmpf(t, egFlac, "eg.flac")
-	_, err := taglib.New(path)
-	nilErr(t, err)
-}
-
 func TestFile(t *testing.T) {
 	path := tmpf(t, egFlac, "eg.flac")
 	f, err := taglib.New(path)
 	nilErr(t, err)
 	defer f.Close()
 
-	artists := f.GetTag("artist")
-	eq(t, len(artists), 2)
-	eq(t, artists[0], "Artist One")
-	eq(t, artists[1], "Artist Two")
-
-	f.SetTag("artist")
-
-	artists = f.GetTag("artist")
-	eq(t, len(artists), 0)
-
-	f.SetTag("artist", "ABC")
-
-	artists = f.GetTag("artist")
-	eq(t, len(artists), 1)
-	eq(t, artists[0], "ABC")
-
-	f.SetTag("artist", "ABC", "DEF")
-
-	artists = f.GetTag("artist")
-	eq(t, len(artists), 2)
-	eq(t, artists[0], "ABC")
-	eq(t, artists[1], "DEF")
-
-	f.SetTag("artist", "💪")
-
-	artists = f.GetTag("artist")
-	eq(t, len(artists), 1)
-	eq(t, artists[0], "💪")
+	tags := f.ReadTags()
+	eq(t, len(tags["ARTIST"]), 2)
+	eq(t, tags["ARTIST"][0], "Artist One")
+	eq(t, tags["ARTIST"][1], "Artist Two")
 
 	eq(t, 1*time.Second, f.Length())
 	eq(t, 1460, f.Bitrate())
 	eq(t, 48_000, f.SampleRate())
 	eq(t, 2, f.Channels())
-
-	err = f.Save()
-	nilErr(t, err)
 }
 
 func TestMultiOpen(t *testing.T) {
-	t.Skip("")
-
 	{
 		path := tmpf(t, egFlac, "eg.flac")
 		f, err := taglib.New(path)
@@ -89,7 +53,7 @@ func BenchmarkOpen(b *testing.B) {
 	for range b.N {
 		f, err := taglib.New(path)
 		nilErr(b, err)
-		_ = maps.Collect(f.IterTags())
+		_ = f.ReadTags()
 		f.Close()
 	}
 }
