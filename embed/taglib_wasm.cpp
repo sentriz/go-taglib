@@ -38,7 +38,7 @@ char **taglib_file_tags(const TagLib_File *file) {
       row.append(v);
       tags[i] = new char[row.size() + 1];
       strncpy(tags[i], row.toCString(), row.size());
-      tags[i][row.size()] = '\0'; // Ensure null-termination
+      tags[i][row.size()] = '\0';
       i++;
     }
 
@@ -46,22 +46,20 @@ char **taglib_file_tags(const TagLib_File *file) {
   return tags;
 }
 
-bool taglib_write_tags(TagLib_File *file, const char **tags) {
+void taglib_file_write_tags(TagLib_File *file, const char **tags) {
   auto f = reinterpret_cast<TagLib::FileRef *>(file);
 
   TagLib::PropertyMap properties;
-  for (int i = 0; tags[i] != NULL; i++) {
-    TagLib::String row(tags[i]);
-    size_t tabPos = row.find("\t");
-    if (tabPos != TagLib::String::npos) {
-      TagLib::String key = row.substr(0, tabPos);
-      TagLib::String value = row.substr(tabPos + 1);
+  for (size_t i = 0; tags[i] != NULL; i++) {
+    TagLib::String row = tags[i];
+    if (size_t ti = row.find("\t"); ti >= 0) {
+      TagLib::String key = row.substr(0, ti);
+      TagLib::String value = row.substr(ti + 1);
       properties.insert(key, value);
     }
   }
 
   f->setProperties(properties);
-  return f->save();
 }
 
 int *taglib_file_audioproperties(const TagLib_File *file) {

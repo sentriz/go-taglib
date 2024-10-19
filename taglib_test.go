@@ -2,8 +2,10 @@ package taglib_test
 
 import (
 	_ "embed"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -29,6 +31,36 @@ func TestFile(t *testing.T) {
 	eq(t, 1460, f.Bitrate())
 	eq(t, 48_000, f.SampleRate())
 	eq(t, 2, f.Channels())
+}
+
+func TestWrite(t *testing.T) {
+	path := tmpf(t, egFlac, "eg.flac")
+
+	tags := map[string][]string{
+		"ONE":  {"one", "two", "three", "four"},
+		"FIVE": {"six", "seven"},
+		"NINE": {"ten"},
+	}
+
+	{
+		f, err := taglib.New(path)
+		nilErr(t, err)
+
+		f.WriteTags(tags)
+		f.Save()
+		f.Close()
+	}
+	{
+		f, err := taglib.New(path)
+		nilErr(t, err)
+
+		gotTags := f.ReadTags()
+		f.Close()
+
+		if !maps.EqualFunc(tags, gotTags, slices.Equal) {
+			t.Fatal("%v != %v", gotTags, tags)
+		}
+	}
 }
 
 func TestMultiOpen(t *testing.T) {

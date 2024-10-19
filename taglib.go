@@ -53,6 +53,16 @@ func (f File) ReadTags() map[string][]string {
 	return m
 }
 
+func (f File) WriteTags(m map[string][]string) {
+	var s []string
+	for k, vs := range m {
+		for _, v := range vs {
+			s = append(s, k+"\t"+v)
+		}
+	}
+	taglibFileWriteTags(f.ptr, s)
+}
+
 func (f File) Length() time.Duration {
 	return time.Duration(f.properties()[audioPropertyLengthInMilliseconds]) * time.Millisecond
 }
@@ -98,6 +108,13 @@ func taglibFileTags(file uint32) []string {
 	stk.int(file)
 	call(&stk, "taglib_file_tags")
 	return stk.getStrings()
+}
+
+func taglibFileWriteTags(file uint32, tags []string) {
+	defer stk.reset()()
+	stk.int(file)
+	stk.strings(tags)
+	call(&stk, "taglib_file_write_tags")
 }
 
 const (
@@ -188,6 +205,30 @@ func (stk *stack) string(s string) {
 
 	stk.stack = append(stk.stack, uint64(ptr))
 	stk.ptrs = append(stk.ptrs, uint64(ptr))
+}
+
+func (stk *stack) strings(ss []string) {
+	arrayPtr := malloc(uint64((len(ss) + 1) * 4))
+
+	for i, s := range ss {
+		b := append([]byte(s), 0)
+
+		ptr := malloc(uint64(len(b)))
+		if !module.Memory().Write(ptr, b) {
+			panic("failed to write to memory")
+		}
+
+		if !module.Memory().WriteUint32Le(arrayPtr+uint32(i*4), ptr) {
+			panic("failed to write pointer to memory")
+		}
+		stk.ptrs = append(stk.ptrs, uint64(ptr))
+	}
+	if !module.Memory().WriteUint32Le(arrayPtr+uint32(len(ss)*4), 0) {
+		panic("failed to write pointer to memory")
+	}
+
+	stk.stack = append(stk.stack, uint64(arrayPtr))
+	stk.ptrs = append(stk.ptrs, uint64(arrayPtr))
 }
 
 func (stk *stack) getPtr() uint32        { return uint32(stk.stack[0]) }
