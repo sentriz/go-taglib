@@ -92,6 +92,9 @@ The binary is already included in the package. However if you want to manually b
    $ cd go-taglib
    ```
 
+> [!NOTE]
+> Make sure to use the `--recursive` flag, without it there will be no TagLib submodule to build with 
+
 3. Generate the WASM binary:
 
    ```console
