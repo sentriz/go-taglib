@@ -85,7 +85,7 @@ func main() {
 The binary is already included in the package. However if you want to manually build and override it, you can with WASI SDK and Go build flags
 
 1. Install [WASI SDK](https://github.com/WebAssembly/wasi-sdk) globally. The default installation path is `/opt/wasi-sdk/`
-2. Clone this repository and Git submodules **WARNING** Note "submodules" and --recursive flag. Otherwise tablib's repository wont be cloned when cloning go-taglib.
+2. Clone this repository and Git submodules. **WARNING** Note "submodules" and --recursive flag. Otherwise tablib's repository wont be cloned when cloning go-taglib.
 
    ```console
    $ git clone "https://github.com/sentriz/go-taglib.git" --recursive
