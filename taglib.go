@@ -16,6 +16,11 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
+//go:generate cmake -DWASI_SDK_PREFIX=/opt/wasi-sdk -DCMAKE_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk.cmake -B build .
+//go:generate cmake --build build --target taglib
+//go:generate mv build/taglib.wasm .
+//go:generate wasm-opt --strip -c -O3 taglib.wasm -o taglib.wasm
+
 //go:embed taglib.wasm
 var binary []byte // WASM blob. To override, go build -ldflags="-X 'go.senan.xyz/taglib.binaryPath=/path/to/taglib.wasm'"
 var binaryPath string
@@ -138,6 +143,9 @@ const (
 func ReadTags(path string) (map[string][]string, error) {
 	var err error
 	path, err = filepath.Abs(path)
+
+	//fmt.Println("test, yes i'm here. 2")
+
 	if err != nil {
 		return nil, fmt.Errorf("make path abs %w", err)
 	}
@@ -166,6 +174,43 @@ func ReadTags(path string) (map[string][]string, error) {
 		tags[k] = append(tags[k], v)
 	}
 	return tags, nil
+}
+
+// ReadID3v2Frames reads all ID3v2 frames from an MP3 file at the given path.
+// This provides direct access to the raw ID3v2 frames, including custom frames like TXXX.
+// The returned map has frame IDs as keys (like "TIT2", "TPE1", "TXXX") and frame data as values.
+// For TXXX frames, the description is included in the key as "TXXX:description".
+func ReadID3v2Frames(path string) (map[string][]string, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("make path abs %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	mod, err := newModuleRO(dir)
+	if err != nil {
+		return nil, fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var raw []string
+	if err := mod.call("taglib_file_id3v2_frames", &raw, wasmPath(path)); err != nil {
+		return nil, fmt.Errorf("call: %w", err)
+	}
+	if raw == nil {
+		return nil, ErrInvalidFile
+	}
+
+	var frames = map[string][]string{}
+	for _, row := range raw {
+		parts := strings.SplitN(row, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		frames[parts[0]] = append(frames[parts[0]], parts[1])
+	}
+	return frames, nil
 }
 
 // Properties contains the audio properties of a media file.

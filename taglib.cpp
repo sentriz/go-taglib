@@ -4,6 +4,12 @@
 
 #include "fileref.h"
 #include "tpropertymap.h"
+#include "mpeg/mpegfile.h"
+#include "mpeg/id3v2/id3v2tag.h"
+#include "mpeg/id3v2/frames/textidentificationframe.h"
+#include "mpeg/id3v2/frames/commentsframe.h"
+#include "mpeg/id3v2/frames/popularimeterframe.h"
+#include "mpeg/id3v2/frames/unsynchronizedlyricsframe.h"
 
 char *to_char_array(const TagLib::String &s) {
   const std::string str = s.to8Bit(true);
@@ -101,3 +107,85 @@ taglib_file_audioproperties(const char *filename) {
 
   return arr;
 }
+
+__attribute__((export_name("taglib_file_id3v2_frames"))) char **
+taglib_file_id3v2_frames(const char *filename) {
+  // First check if this is an MP3 file with ID3v2 tags
+  TagLib::FileRef fileRef(filename);
+  if (fileRef.isNull())
+    return nullptr;
+    
+  // Try to cast to MPEG::File
+  TagLib::MPEG::File *mpegFile = dynamic_cast<TagLib::MPEG::File *>(fileRef.file());
+  if (!mpegFile || !mpegFile->hasID3v2Tag())
+    return nullptr;
+    
+  TagLib::ID3v2::Tag *id3v2Tag = mpegFile->ID3v2Tag();
+  const TagLib::ID3v2::FrameListMap &frameListMap = id3v2Tag->frameListMap();
+  
+  // Count total number of frames
+  size_t frameCount = 0;
+  for (TagLib::ID3v2::FrameListMap::ConstIterator it = frameListMap.begin(); it != frameListMap.end(); ++it) {
+    frameCount += it->second.size();
+  }
+  
+  if (frameCount == 0)
+    return nullptr;
+    
+  // Allocate result array
+  char **frames = static_cast<char **>(malloc(sizeof(char *) * (frameCount + 1)));
+  if (!frames)
+    return nullptr;
+    
+  size_t i = 0;
+  
+  // Process each frame
+  for (TagLib::ID3v2::FrameListMap::ConstIterator it = frameListMap.begin(); it != frameListMap.end(); ++it) {
+    TagLib::String frameID = TagLib::String(it->first);
+    
+    for (TagLib::ID3v2::FrameList::ConstIterator frameIt = it->second.begin(); frameIt != it->second.end(); ++frameIt) {
+      TagLib::String key = frameID;
+      TagLib::String value;
+      
+      // Handle special frame types
+      if (frameID == "TXXX") {
+        // User text identification frame
+        auto userFrame = dynamic_cast<TagLib::ID3v2::UserTextIdentificationFrame *>(*frameIt);
+        if (userFrame) {
+          key = frameID + ":" + userFrame->description();
+          if (!userFrame->fieldList().isEmpty()) {
+            value = userFrame->fieldList().back();
+          }
+        }
+      } 
+      else if (frameID == "COMM") {
+        // Comments frame
+        auto commFrame = dynamic_cast<TagLib::ID3v2::CommentsFrame *>(*frameIt);
+        if (commFrame) {
+          key = frameID + ":" + commFrame->description();
+          value = commFrame->text();
+        }
+      }
+      else if (frameID == "POPM") {
+        // Popularimeter frame (used for WMP ratings)
+        auto popmFrame = dynamic_cast<TagLib::ID3v2::PopularimeterFrame *>(*frameIt);
+        if (popmFrame) {
+          key = frameID + ":" + popmFrame->email();
+          value = TagLib::String::number(popmFrame->rating());
+        }
+      }
+      else {
+        // Standard frame
+        value = (*frameIt)->toString();
+      }
+      
+      // Create the output string
+      TagLib::String row = key + "\t" + value;
+      frames[i++] = to_char_array(row);
+    }
+  }
+  
+  frames[i] = nullptr;
+  return frames;
+}
+

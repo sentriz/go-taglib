@@ -13,6 +13,14 @@ add_subdirectory(
 include_directories(
   taglib/taglib
   taglib/taglib/toolkit
+  taglib/taglib/mpeg
+  taglib/taglib/mpeg/id3v1
+  taglib/taglib/mpeg/id3v2
+  taglib/taglib/mpeg/id3v2/frames
+  taglib/taglib/ogg
+  taglib/taglib/ogg/flac
+  taglib/taglib/flac
+  taglib/taglib/mp4
 )
 
 add_executable(taglib taglib.cpp)
