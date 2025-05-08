@@ -5,6 +5,5 @@ RUN apt-get install -y --no-install-recommends binaryen
 RUN rm -rf /var/lib/apt/lists/*
 
 COPY . /taglib
-# RUN chmod +x /build-wasm.sh
 
 WORKDIR /taglib
