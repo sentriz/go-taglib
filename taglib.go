@@ -16,11 +16,6 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
-//go:generate cmake -DWASI_SDK_PREFIX=/opt/wasi-sdk -DCMAKE_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk.cmake -B build .
-//go:generate cmake --build build --target taglib
-//go:generate mv build/taglib.wasm .
-//go:generate wasm-opt --strip -c -O3 taglib.wasm -o taglib.wasm
-
 //go:embed taglib.wasm
 var binary []byte // WASM blob. To override, go build -ldflags="-X 'go.senan.xyz/taglib.binaryPath=/path/to/taglib.wasm'"
 var binaryPath string
