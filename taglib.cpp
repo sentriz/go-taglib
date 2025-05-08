@@ -5,6 +5,12 @@
 #include "fileref.h"
 #include "tpropertymap.h"
 
+// Size must come first so that we know how much of data to read
+struct picture {
+  unsigned int length;
+  char *data;
+};
+
 char *to_char_array(const TagLib::String &s) {
   const std::string str = s.to8Bit(true);
   return ::strdup(str.c_str());
@@ -100,4 +106,71 @@ taglib_file_audioproperties(const char *filename) {
   arr[3] = audioProperties->bitrate();
 
   return arr;
+}
+
+__attribute__((export_name("taglib_file_read_image"))) picture *
+taglib_file_read_image(const char *filename) {
+  TagLib::FileRef file(filename);
+  if (file.isNull() || !file.audioProperties())
+    return nullptr;
+
+  const auto& pictures = file.complexProperties("PICTURE");
+  if (pictures.isEmpty())
+    return nullptr;
+
+  picture *pic = (picture *)malloc(sizeof(picture));
+  for (const auto &p: pictures) {
+    const auto pictureType = p["pictureType"].toString();
+    if (pictureType == "Front Cover") {
+      auto v = p["data"].toByteVector();
+      if (!v.isEmpty()) {
+        pic->length = unsigned(v.size());
+        pic->data = v.data();
+        return pic;
+      }
+    }
+  }
+
+  // If we couldn't find a front cover pick a random cover
+  auto v = pictures.front()["data"].toByteVector();
+  pic->length = unsigned(v.size());
+  pic->data = v.data();
+  return pic;
+}
+
+// TODO: Maybe allow user to set cover type?
+__attribute__((export_name("taglib_file_write_image"))) bool
+taglib_file_write_image(const char *filename, const char *buf, unsigned int length) {
+  TagLib::FileRef file(filename);
+  if (file.isNull() || !file.audioProperties())
+    return false;
+
+  // https://github.com/taglib/taglib/blob/v2.0.2/examples/tagwriter.cpp#L187-L189
+  TagLib::ByteVector data(buf, length);
+  TagLib::String mimeType = data.startsWith("\x89PNG\x0d\x0a\x1a\x0a") ? "image/png" : "image/jpeg";
+
+  file.setComplexProperties("PICTURE", {
+    {
+      {"data", data},
+      {"pictureType", "Front Cover"},
+      {"mimeType", mimeType},
+      {"description", "Added by go-taglib"}
+    }
+  });
+
+  return file.save();
+}
+
+__attribute__((export_name("taglib_file_clear_images"))) bool
+taglib_file_clear_images(const char *filename) {
+  TagLib::FileRef file(filename);
+  if (file.isNull() || !file.audioProperties())
+    return false;
+
+  // This is how TagLib does it
+  // https://github.com/taglib/taglib/blob/v2.0.2/examples/tagwriter.cpp#L202
+  if (!file.setComplexProperties("PICTURE", {}))
+    return false;
+  
+  return file.save();
 }
