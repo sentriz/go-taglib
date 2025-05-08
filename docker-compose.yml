@@ -1,0 +1,9 @@
+services:
+  taglib:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taglib
+    volumes:
+      - .:/taglib
+    working_dir: /taglib
