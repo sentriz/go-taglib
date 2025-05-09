@@ -82,11 +82,12 @@ func main() {
 
 ## Manually Building and Using the WASM Binary
 
-The binary is already included in the package. However if you want to manually build and override it, you can with WASI SDK and Go build flags
+A docker file is provided to build the WASM binary. 
+[WASI SDK](https://github.com/WebAssembly/wasi-sdk) (includes Autotools, CMake, and Ninja) and 
+[Binaryen](https://github.com/WebAssembly/binaryen) are installed during the docker container build.
 
-1. Install [WASI SDK](https://github.com/WebAssembly/wasi-sdk) globally. The default installation path is `/opt/wasi-sdk/`
-2. Install [Binaryen](https://github.com/WebAssembly/binaryen) globally.
-3. Clone this repository and Git submodules
+1. Install Docker
+2. Clone this repository and Git submodules
 
    ```console
    $ git clone "https://github.com/sentriz/go-taglib.git" --recursive
@@ -96,14 +97,14 @@ The binary is already included in the package. However if you want to manually b
 > [!NOTE]
 > Make sure to use the `--recursive` flag, without it there will be no TagLib submodule to build with 
 
-4. Generate the WASM binary:
+3. Generate the WASM binary:
 
    ```console
-   $ go generate ./...
+   $ docker compose run taglib ./build-wasm.sh
    $ # taglib.wasm created
    ```
 
-5. Use the new binary in your project
+4. Use the new binary in your project
 
    ```console
    $ CGO_ENABLED=0 go build -ldflags="-X 'go.senan.xyz/taglib.binaryPath=/path/to/taglib.wasm'" ./your/project/...

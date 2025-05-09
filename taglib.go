@@ -143,6 +143,9 @@ const (
 func ReadTags(path string) (map[string][]string, error) {
 	var err error
 	path, err = filepath.Abs(path)
+
+	//fmt.Println("test, yes i'm here. 2")
+
 	if err != nil {
 		return nil, fmt.Errorf("make path abs %w", err)
 	}
@@ -171,6 +174,82 @@ func ReadTags(path string) (map[string][]string, error) {
 		tags[k] = append(tags[k], v)
 	}
 	return tags, nil
+}
+
+// ReadID3v2Frames reads all ID3v2 frames from an MP3 file at the given path.
+// This provides direct access to the raw ID3v2 frames, including custom frames like TXXX.
+// The returned map has frame IDs as keys (like "TIT2", "TPE1", "TXXX") and frame data as values.
+// For TXXX frames, the description is included in the key as "TXXX:description".
+func ReadID3v2Frames(path string) (map[string][]string, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("make path abs %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	mod, err := newModuleRO(dir)
+	if err != nil {
+		return nil, fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var raw []string
+	if err := mod.call("taglib_file_id3v2_frames", &raw, wasmPath(path)); err != nil {
+		return nil, fmt.Errorf("call: %w", err)
+	}
+	if raw == nil {
+		return nil, ErrInvalidFile
+	}
+
+	// If raw is empty, the file has no ID3v2 frames
+	var frames = map[string][]string{}
+	for _, row := range raw {
+		parts := strings.SplitN(row, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		frames[parts[0]] = append(frames[parts[0]], parts[1])
+	}
+	return frames, nil
+}
+
+// ReadID3v1Frames reads all ID3v1 tags from an MP3 file at the given path.
+// This provides access to the standard ID3v1 fields: title, artist, album, year, comment, track, and genre.
+// The returned map has standardized keys (like "TITLE", "ARTIST", "ALBUM") and values.
+// Note that ID3v1 is a much simpler format than ID3v2 with a fixed set of fields.
+func ReadID3v1Frames(path string) (map[string][]string, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("make path abs %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	mod, err := newModuleRO(dir)
+	if err != nil {
+		return nil, fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var raw []string
+	if err := mod.call("taglib_file_id3v1_tags", &raw, wasmPath(path)); err != nil {
+		return nil, fmt.Errorf("call: %w", err)
+	}
+	if raw == nil {
+		return nil, ErrInvalidFile
+	}
+
+	// If raw is empty, the file has no ID3v1 tags
+	var frames = map[string][]string{}
+	for _, row := range raw {
+		parts := strings.SplitN(row, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		frames[parts[0]] = append(frames[parts[0]], parts[1])
+	}
+	return frames, nil
 }
 
 // Properties contains the audio properties of a media file.
@@ -262,6 +341,58 @@ func WriteTags(path string, tags map[string][]string, opts WriteOption) error {
 	}
 	return nil
 }
+
+// WriteID3v2Frames writes ID3v2 frames to an MP3 file at the given path.
+// This provides direct access to modify raw ID3v2 frames, including custom frames like TXXX.
+// The map should have frame IDs as keys (like "TIT2", "TPE1", "TXXX") and frame data as values.
+// The opts parameter can include taglib.Clear to remove all existing frames not in the new map.
+func WriteID3v2Frames(path string, frames map[string][]string, opts WriteOption) error {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("make path abs %w", err)
+	}
+
+	// Check if file exists and is readable
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("file stat error: %w", err)
+	}
+
+	// Try to open the file to ensure it's not locked
+	file, err := os.OpenFile(path, os.O_RDONLY, 0)
+	if err != nil {
+		return fmt.Errorf("file open error: %w", err)
+	}
+	file.Close()
+
+	dir := filepath.Dir(path)
+	mod, err := newModule(dir)
+	if err != nil {
+		return fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	// Convert the frames map to a slice of strings
+	var framesList []string
+	for k, vs := range frames {
+		framesList = append(framesList, fmt.Sprintf("%s\t%s", k, strings.Join(vs, "\v")))
+	}
+
+	var out bool
+	if err := mod.call("taglib_file_write_id3v2_frames", &out, wasmPath(path), framesList, uint8(opts)); err != nil {
+		return fmt.Errorf("call: %w", err)
+	}
+	if !out {
+		return ErrSavingFile
+	}
+
+	return nil
+}
+
+// WriteID3v1Frames Shouldn't be needed. WriteTags will write to ID3v1 if the file has it.
+// WriteID3v2Frames is provided because there are some ID3v2 frames that aren't included in
+// WriteTags.
+// func WriteID3v1Frames()
 
 type rc struct {
 	wazero.Runtime
