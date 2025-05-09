@@ -202,6 +202,7 @@ func ReadID3v2Frames(path string) (map[string][]string, error) {
 		return nil, ErrInvalidFile
 	}
 
+	// If raw is empty, the file has no ID3v2 frames
 	var frames = map[string][]string{}
 	for _, row := range raw {
 		parts := strings.SplitN(row, "\t", 2)
@@ -239,6 +240,7 @@ func ReadID3v1Frames(path string) (map[string][]string, error) {
 		return nil, ErrInvalidFile
 	}
 
+	// If raw is empty, the file has no ID3v1 tags
 	var frames = map[string][]string{}
 	for _, row := range raw {
 		parts := strings.SplitN(row, "\t", 2)
@@ -351,6 +353,18 @@ func WriteID3v2Frames(path string, frames map[string][]string, opts WriteOption)
 		return fmt.Errorf("make path abs %w", err)
 	}
 
+	// Check if file exists and is readable
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("file stat error: %w", err)
+	}
+
+	// Try to open the file to ensure it's not locked
+	file, err := os.OpenFile(path, os.O_RDONLY, 0)
+	if err != nil {
+		return fmt.Errorf("file open error: %w", err)
+	}
+	file.Close()
+
 	dir := filepath.Dir(path)
 	mod, err := newModule(dir)
 	if err != nil {
@@ -371,6 +385,10 @@ func WriteID3v2Frames(path string, frames map[string][]string, opts WriteOption)
 	if !out {
 		return ErrSavingFile
 	}
+
+	// Add a small delay to ensure file is properly closed
+	time.Sleep(100 * time.Millisecond)
+
 	return nil
 }
 

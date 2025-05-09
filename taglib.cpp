@@ -118,8 +118,14 @@ taglib_file_id3v2_frames(const char *filename) {
     
   // Try to cast to MPEG::File
   TagLib::MPEG::File *mpegFile = dynamic_cast<TagLib::MPEG::File *>(fileRef.file());
-  if (!mpegFile || !mpegFile->hasID3v2Tag())
-    return nullptr;
+  if (!mpegFile || !mpegFile->hasID3v2Tag()) {
+    // Return empty array instead of nullptr when there are no ID3v2 tags
+    char **emptyFrames = static_cast<char **>(malloc(sizeof(char *)));
+    if (!emptyFrames)
+      return nullptr;
+    emptyFrames[0] = nullptr;
+    return emptyFrames;
+  }
     
   TagLib::ID3v2::Tag *id3v2Tag = mpegFile->ID3v2Tag();
   const TagLib::ID3v2::FrameListMap &frameListMap = id3v2Tag->frameListMap();
@@ -130,8 +136,14 @@ taglib_file_id3v2_frames(const char *filename) {
     frameCount += it->second.size();
   }
   
-  if (frameCount == 0)
-    return nullptr;
+  if (frameCount == 0) {
+    // Return empty array if there are no frames
+    char **emptyFrames = static_cast<char **>(malloc(sizeof(char *)));
+    if (!emptyFrames)
+      return nullptr;
+    emptyFrames[0] = nullptr;
+    return emptyFrames;
+  }
     
   // Allocate result array
   char **frames = static_cast<char **>(malloc(sizeof(char *) * (frameCount + 1)));
@@ -199,8 +211,14 @@ taglib_file_id3v1_tags(const char *filename) {
     
   // Try to cast to MPEG::File
   TagLib::MPEG::File *mpegFile = dynamic_cast<TagLib::MPEG::File *>(fileRef.file());
-  if (!mpegFile || !mpegFile->hasID3v1Tag())
-    return nullptr;
+  if (!mpegFile || !mpegFile->hasID3v1Tag()) {
+    // Return empty array instead of nullptr when there are no ID3v1 tags
+    char **emptyTags = static_cast<char **>(malloc(sizeof(char *)));
+    if (!emptyTags)
+      return nullptr;
+    emptyTags[0] = nullptr;
+    return emptyTags;
+  }
     
   TagLib::ID3v1::Tag *id3v1Tag = mpegFile->ID3v1Tag();
   
