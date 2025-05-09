@@ -213,6 +213,43 @@ func ReadID3v2Frames(path string) (map[string][]string, error) {
 	return frames, nil
 }
 
+// ReadID3v1Frames reads all ID3v1 tags from an MP3 file at the given path.
+// This provides access to the standard ID3v1 fields: title, artist, album, year, comment, track, and genre.
+// The returned map has standardized keys (like "TITLE", "ARTIST", "ALBUM") and values.
+// Note that ID3v1 is a much simpler format than ID3v2 with a fixed set of fields.
+func ReadID3v1Frames(path string) (map[string][]string, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("make path abs %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	mod, err := newModuleRO(dir)
+	if err != nil {
+		return nil, fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var raw []string
+	if err := mod.call("taglib_file_id3v1_tags", &raw, wasmPath(path)); err != nil {
+		return nil, fmt.Errorf("call: %w", err)
+	}
+	if raw == nil {
+		return nil, ErrInvalidFile
+	}
+
+	var frames = map[string][]string{}
+	for _, row := range raw {
+		parts := strings.SplitN(row, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		frames[parts[0]] = append(frames[parts[0]], parts[1])
+	}
+	return frames, nil
+}
+
 // Properties contains the audio properties of a media file.
 type Properties struct {
 	// Length is the duration of the audio

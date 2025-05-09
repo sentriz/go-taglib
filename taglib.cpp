@@ -5,6 +5,7 @@
 #include "fileref.h"
 #include "tpropertymap.h"
 #include "mpeg/mpegfile.h"
+#include "mpeg/id3v1/id3v1tag.h"
 #include "mpeg/id3v2/id3v2tag.h"
 #include "mpeg/id3v2/frames/textidentificationframe.h"
 #include "mpeg/id3v2/frames/commentsframe.h"
@@ -187,5 +188,57 @@ taglib_file_id3v2_frames(const char *filename) {
   
   frames[i] = nullptr;
   return frames;
+}
+
+__attribute__((export_name("taglib_file_id3v1_tags"))) char **
+taglib_file_id3v1_tags(const char *filename) {
+  // First check if this is an MP3 file with ID3v1 tags
+  TagLib::FileRef fileRef(filename);
+  if (fileRef.isNull())
+    return nullptr;
+    
+  // Try to cast to MPEG::File
+  TagLib::MPEG::File *mpegFile = dynamic_cast<TagLib::MPEG::File *>(fileRef.file());
+  if (!mpegFile || !mpegFile->hasID3v1Tag())
+    return nullptr;
+    
+  TagLib::ID3v1::Tag *id3v1Tag = mpegFile->ID3v1Tag();
+  
+  // ID3v1 has a fixed set of fields
+  const int fieldCount = 7; // title, artist, album, year, comment, track, genre
+  char **tags = static_cast<char **>(malloc(sizeof(char *) * (fieldCount + 1)));
+  if (!tags)
+    return nullptr;
+    
+  int i = 0;
+  
+  // Add each standard ID3v1 field
+  if (!id3v1Tag->title().isEmpty())
+    tags[i++] = to_char_array(TagLib::String("TITLE\t") + id3v1Tag->title());
+  
+  if (!id3v1Tag->artist().isEmpty())
+    tags[i++] = to_char_array(TagLib::String("ARTIST\t") + id3v1Tag->artist());
+  
+  if (!id3v1Tag->album().isEmpty())
+    tags[i++] = to_char_array(TagLib::String("ALBUM\t") + id3v1Tag->album());
+  
+  // Year is an unsigned int in ID3v1, convert to string
+  if (id3v1Tag->year() > 0)
+    tags[i++] = to_char_array(TagLib::String("YEAR\t") + TagLib::String::number(id3v1Tag->year()));
+  
+  if (!id3v1Tag->comment().isEmpty())
+    tags[i++] = to_char_array(TagLib::String("COMMENT\t") + id3v1Tag->comment());
+  
+  if (id3v1Tag->track() > 0)
+    tags[i++] = to_char_array(TagLib::String("TRACK\t") + TagLib::String::number(id3v1Tag->track()));
+  
+  // Genre is an int in ID3v1, need to get the string representation
+  if (id3v1Tag->genreNumber() != 255) { // 255 is used for "unknown genre"
+    if (!id3v1Tag->genre().isEmpty())
+      tags[i++] = to_char_array(TagLib::String("GENRE\t") + id3v1Tag->genre());
+  }
+  
+  tags[i] = nullptr;
+  return tags;
 }
 
