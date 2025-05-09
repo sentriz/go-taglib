@@ -340,6 +340,45 @@ func WriteTags(path string, tags map[string][]string, opts WriteOption) error {
 	return nil
 }
 
+// WriteID3v2Frames writes ID3v2 frames to an MP3 file at the given path.
+// This provides direct access to modify raw ID3v2 frames, including custom frames like TXXX.
+// The map should have frame IDs as keys (like "TIT2", "TPE1", "TXXX") and frame data as values.
+// The opts parameter can include taglib.Clear to remove all existing frames not in the new map.
+func WriteID3v2Frames(path string, frames map[string][]string, opts WriteOption) error {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("make path abs %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	mod, err := newModule(dir)
+	if err != nil {
+		return fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	// Convert the frames map to a slice of strings
+	var framesList []string
+	for k, vs := range frames {
+		framesList = append(framesList, fmt.Sprintf("%s\t%s", k, strings.Join(vs, "\v")))
+	}
+
+	var out bool
+	if err := mod.call("taglib_file_write_id3v2_frames", &out, wasmPath(path), framesList, uint8(opts)); err != nil {
+		return fmt.Errorf("call: %w", err)
+	}
+	if !out {
+		return ErrSavingFile
+	}
+	return nil
+}
+
+// WriteID3v1Frames Shouldn't be needed. WriteTags will write to ID3v1 if the file has it.
+// WriteID3v2Frames is provided because there are some ID3v2 frames that aren't included in
+// WriteTags.
+// func WriteID3v1Frames()
+
 type rc struct {
 	wazero.Runtime
 	wazero.CompiledModule

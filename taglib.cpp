@@ -242,3 +242,105 @@ taglib_file_id3v1_tags(const char *filename) {
   return tags;
 }
 
+__attribute__((export_name("taglib_file_write_id3v2_frames"))) bool
+taglib_file_write_id3v2_frames(const char *filename, const char **frames, uint8_t opts) {
+  if (!filename || !frames)
+    return false;
+
+  // First check if this is an MP3 file with ID3v2 tags
+  TagLib::MPEG::File file(filename);
+  if (!file.isValid())
+    return false;
+    
+  // Create a new ID3v2 tag if one doesn't exist
+  if (!file.hasID3v2Tag()) {
+    file.ID3v2Tag(true);
+  }
+  
+  TagLib::ID3v2::Tag *id3v2Tag = file.ID3v2Tag();
+  
+  // If clear option is set, collect all frame IDs we want to keep
+  bool clearFrames = (opts & CLEAR);
+  
+  // First collect all the frame IDs we're going to set
+  std::vector<TagLib::ByteVector> frameIDsToKeep;
+  if (clearFrames) {
+    for (int i = 0; frames[i] != nullptr; i++) {
+      TagLib::String row(frames[i], TagLib::String::UTF8);
+      int ti = row.find("\t");
+      if (ti != -1) {
+        TagLib::String key = row.substr(0, ti);
+        // Store the base frame ID (without description for TXXX, COMM, etc.)
+        if (key.find(":") != -1) {
+          key = key.substr(0, key.find(":"));
+        }
+        frameIDsToKeep.push_back(key.data(TagLib::String::Latin1));
+      }
+    }
+    
+    // Now remove all frames except those we're going to set
+    const TagLib::ID3v2::FrameListMap &frameListMap = id3v2Tag->frameListMap();
+    for (TagLib::ID3v2::FrameListMap::ConstIterator it = frameListMap.begin(); 
+         it != frameListMap.end(); ++it) {
+      bool keepFrame = false;
+      for (size_t i = 0; i < frameIDsToKeep.size(); ++i) {
+        if (it->first == frameIDsToKeep[i]) {
+          keepFrame = true;
+          break;
+        }
+      }
+      if (!keepFrame) {
+        id3v2Tag->removeFrames(it->first);
+      }
+    }
+  }
+  
+  // Now add the new frames
+  for (int i = 0; frames[i] != nullptr; i++) {
+    TagLib::String row(frames[i], TagLib::String::UTF8);
+    int ti = row.find("\t");
+    if (ti != -1) {
+      TagLib::String key = row.substr(0, ti);
+      TagLib::String value = row.substr(ti + 1);
+      
+      // Remove existing frames with this ID
+      id3v2Tag->removeFrames(key.toCString(true));
+      
+      // Add new frame if value is not empty
+      if (!value.isEmpty()) {
+        if (key.startsWith("T")) {
+          // Text identification frame
+          auto newFrame = new TagLib::ID3v2::TextIdentificationFrame(key.toCString(true), TagLib::String::UTF8);
+          TagLib::StringList values;
+          
+          // Split value by vertical tab
+          int pos = 0;
+          while (pos != -1) {
+            int nextPos = value.find("\v", pos);
+            if (nextPos == -1) {
+              values.append(value.substr(pos));
+              break;
+            } else {
+              values.append(value.substr(pos, nextPos - pos));
+              pos = nextPos + 1;
+            }
+          }
+          
+          newFrame->setText(values);
+          id3v2Tag->addFrame(newFrame);
+        }
+        else if (key == "COMM") {
+          // Comments frame
+          auto newFrame = new TagLib::ID3v2::CommentsFrame(TagLib::String::UTF8);
+          newFrame->setText(value);
+          id3v2Tag->addFrame(newFrame);
+        }
+        // Add other frame types as needed
+      }
+    }
+  }
+  
+  // Save the file
+  return file.save();
+}
+
