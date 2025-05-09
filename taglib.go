@@ -386,9 +386,6 @@ func WriteID3v2Frames(path string, frames map[string][]string, opts WriteOption)
 		return ErrSavingFile
 	}
 
-	// Add a small delay to ensure file is properly closed
-	time.Sleep(100 * time.Millisecond)
-
 	return nil
 }
 
