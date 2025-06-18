@@ -47,7 +47,6 @@ taglib_file_tags(const char *filename) {
 }
 
 static const uint8_t CLEAR = 1 << 0;
-static const uint8_t DIFF_SAVE = 1 << 1;
 
 __attribute__((export_name("taglib_file_write_tags"))) bool
 taglib_file_write_tags(const char *filename, const char **tags, uint8_t opts) {
@@ -72,11 +71,6 @@ taglib_file_write_tags(const char *filename, const char **tags, uint8_t opts) {
       else
         properties.replace(key, value.split("\v"));
     }
-  }
-
-  if (opts & DIFF_SAVE) {
-    if (file.properties() == properties)
-      return true;
   }
 
   file.setProperties(properties);

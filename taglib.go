@@ -227,10 +227,6 @@ type WriteOption uint8
 const (
 	// Clear indicates that all existing tags not present in the new map should be removed.
 	Clear WriteOption = 1 << iota
-
-	// DiffBeforeWrite enables comparison before writing to disk.
-	// When set, no write occurs if the map contains no changes compared to the existing tags.
-	DiffBeforeWrite
 )
 
 // WriteTags writes the metadata key-values pairs to path. The behavior can be controlled with [WriteOption].
@@ -338,7 +334,7 @@ func newModuleOpt(dir string, readOnly bool) (module, error) {
 		WithFSConfig(fsConfig)
 
 	ctx := context.Background()
-	mod, err := rt.Runtime.InstantiateModule(ctx, rt.CompiledModule, cfg)
+	mod, err := rt.InstantiateModule(ctx, rt.CompiledModule, cfg)
 	if err != nil {
 		return module{}, err
 	}

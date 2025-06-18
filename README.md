@@ -55,15 +55,12 @@ The behaviour of writing can be configured with some bitset flags
 The options are
 
 - `Clear` which indicates that all existing tags not present in the new map should be removed
-- `DiffBeforeWrite` which won't modify the file on disk if the new metadata is the same as the old
 
 The options can be combined the with the bitwise `OR` operator (`|`)
 
 ```go
-    taglib.WriteTags(path, tags, taglib.Clear|taglib.DiffBeforeWrite) // clear and diff
-    taglib.WriteTags(path, tags, taglib.DiffBeforeWrite)              // only diff diff
-    taglib.WriteTags(path, tags, taglib.Clear)                        // only clear
-    taglib.WriteTags(path, tags, 0)                                   // don't clear or diff
+    taglib.WriteTags(path, tags, taglib.Clear)
+    taglib.WriteTags(path, tags, 0)
 ```
 
 ### Reading properties
@@ -94,7 +91,7 @@ The binary is already included in the package. However if you want to manually b
    ```
 
 > [!NOTE]
-> Make sure to use the `--recursive` flag, without it there will be no TagLib submodule to build with 
+> Make sure to use the `--recursive` flag, without it there will be no TagLib submodule to build with
 
 4. Generate the WASM binary:
 
