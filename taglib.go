@@ -30,7 +30,7 @@ var ErrSavingFile = fmt.Errorf("can't save file")
 
 // These constants define normalized tag keys used by TagLib's [property mapping].
 // When using [ReadTags], the library will map format-specific metadata to these standardized keys.
-// Similarly, [WriteTags] and [ReplaceTags] will map these keys back to the appropriate format-specific fields.
+// Similarly, [WriteTags] will map these keys back to the appropriate format-specific fields.
 //
 // While these constants provide a consistent interface across different audio formats,
 // you can also use custom tag keys if the underlying format supports arbitrary tags.
