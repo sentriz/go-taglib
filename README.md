@@ -1,6 +1,6 @@
 # go-taglib
 
-This project is a Go library for reading and writing audio metadata tags. By packaging an embedded **WASM** binary, the library needs no external dependencies or CGo. Meaning easy static builds and cross compilation.
+This project is a Go library for reading and writing audio metadata tags. By packaging an embedded **Wasm** binary, the library needs no external dependencies or CGo. Meaning easy static builds and cross compilation.
 
 Current bundled TagLib version is [v2.1.1](https://github.com/taglib/taglib/releases/tag/v2.1.1).
 
@@ -79,7 +79,7 @@ func main() {
 }
 ```
 
-## Manually Building and Using the WASM Binary
+## Manually Building and Using the Wasm Binary
 
 The binary is already included in the package. However if you want to manually build and override it, you can with WASI SDK and Go build flags
 
@@ -95,7 +95,7 @@ The binary is already included in the package. However if you want to manually b
 > [!NOTE]
 > Make sure to use the `--recursive` flag, without it there will be no TagLib submodule to build with
 
-4. Generate the WASM binary:
+4. Generate the Wasm binary:
 
    ```console
    $ go generate ./...
