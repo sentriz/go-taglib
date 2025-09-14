@@ -1,0 +1,24 @@
+name: Lint and test
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Golang with cache
+        uses: magnetikonline/action-golang-cache@v5
+        with:
+          go-version-file: go.mod
+      - name: Lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          install-mode: goinstall
+          version: v2.4.0
+      - name: Test
+        run: go test ./...
