@@ -4,6 +4,8 @@ This project is a Go library for reading and writing audio metadata tags. By pac
 
 Current bundled TagLib version is [v2.1.1](https://github.com/taglib/taglib/releases/tag/v2.1.1).
 
+To reproduce or verify the bundled binary, see the [attestations](https://github.com/sentriz/go-taglib/attestations/).
+
 [![godoc](https://img.shields.io/badge/pkg.go.dev-doc-blue)](http://pkg.go.dev/go.senan.xyz/taglib)
 
 ## Features

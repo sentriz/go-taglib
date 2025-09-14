@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+set -e
+
 wasi_loc="$1"
 if [ -z "$wasi_loc" ]; then
     echo "please provide <wasi loc>" >&2

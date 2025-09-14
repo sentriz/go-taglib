@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+set -e
+
 image="go-taglib-build"
 
 docker build -t "$image" "./build"
