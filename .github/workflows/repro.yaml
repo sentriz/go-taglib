@@ -1,0 +1,47 @@
+name: Reproducible build
+on:
+  workflow_dispatch:
+    inputs:
+      wasi_sdk_version:
+        description: "WASI SDK version"
+        required: true
+        default: "27"
+        type: string
+      binaryen_version:
+        description: "Binaryen version"
+        required: true
+        default: "123"
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Golang with cache
+        uses: magnetikonline/action-golang-cache@v5
+        with:
+          go-version-file: go.mod
+      - name: Install WASI SDK
+        run: |
+          curl -L https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${{ inputs.wasi_sdk_version }}/wasi-sdk-${{ inputs.wasi_sdk_version }}.0-x86_64-linux.tar.gz -o wasi-sdk.tar.gz
+          sudo tar -xzf wasi-sdk.tar.gz -C /opt
+          sudo ln -sf /opt/wasi-sdk-${{ inputs.wasi_sdk_version }}.0-x86_64-linux /opt/wasi-sdk
+      - name: Install Binaryen
+        run: |
+          curl -L https://github.com/WebAssembly/binaryen/releases/download/version_${{ inputs.binaryen_version }}/binaryen-version_${{ inputs.binaryen_version }}-x86_64-linux.tar.gz -o binaryen.tar.gz
+          tar -xzf binaryen.tar.gz
+          sudo cp binaryen-version_${{ inputs.binaryen_version }}/bin/* /usr/local/bin/
+      - name: Checkout submodules
+        run: git submodule update --init --recursive
+      - name: Build taglib.wasm
+        run: go generate .
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            taglib.wasm
