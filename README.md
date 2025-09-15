@@ -98,7 +98,7 @@ The binary is already included in the package. However if you want to manually b
 4. Generate the Wasm binary:
 
    ```console
-   $ go generate ./...
+   $ ./build/build.sh
    $ # taglib.wasm created
    ```
 
