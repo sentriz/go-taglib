@@ -85,9 +85,7 @@ func main() {
 
 The binary is already included in the package. However if you want to manually build and override it, you can with WASI SDK and Go build flags
 
-1. Install [WASI SDK](https://github.com/WebAssembly/wasi-sdk) globally. The default installation path is `/opt/wasi-sdk/`
-2. Install [Binaryen](https://github.com/WebAssembly/binaryen) globally.
-3. Clone this repository and Git submodules
+1. Clone this repository and Git submodules
 
    ```console
    $ git clone "https://github.com/sentriz/go-taglib.git" --recursive
@@ -97,14 +95,21 @@ The binary is already included in the package. However if you want to manually b
 > [!NOTE]
 > Make sure to use the `--recursive` flag, without it there will be no TagLib submodule to build with
 
-4. Generate the Wasm binary:
+2. Generate the Wasm binary:
 
    ```console
-   $ ./build/build.sh
+   $ ./build/build-docker.sh
    $ # taglib.wasm created
    ```
 
-5. Use the new binary in your project
+   Or, to build without Docker install [WASI SDK](https://github.com/WebAssembly/wasi-sdk) and [Binaryen](https://github.com/WebAssembly/binaryen), then
+
+   ```console
+   $ ./build/build.sh /path/to/wasi-sdk # eg /opt/wasi-sdk
+   $ # taglib.wasm created
+   ```
+
+3. Use the new binary in your project
 
    ```console
    $ CGO_ENABLED=0 go build -ldflags="-X 'go.senan.xyz/taglib.binaryPath=/path/to/taglib.wasm'" ./your/project/...
