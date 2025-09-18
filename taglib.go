@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -254,6 +255,57 @@ func WriteTags(path string, tags map[string][]string, opts WriteOption) error {
 	return nil
 }
 
+// ReadImage reads the first available embedded image bytes from path, returning nil if there are no images in the file.
+func ReadImage(path string) ([]byte, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("make path abs %w", err)
+	}
+
+	mod, err := newModuleRO(filepath.Dir(path))
+	if err != nil {
+		return nil, fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var img []byte
+	if err := mod.call("taglib_file_read_image", &img, wasmPath(path)); err != nil {
+		return nil, fmt.Errorf("call: %w", err)
+	}
+
+	return img, nil
+}
+
+// WriteImage writes image as an embedded image to path.
+func WriteImage(path string, image []byte) error {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("make path abs %w", err)
+	}
+
+	mod, err := newModule(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var mimeType string
+	if image != nil {
+		mimeType = http.DetectContentType(image)
+	}
+
+	var out bool
+	if err := mod.call("taglib_file_write_image", &out, wasmPath(path), mimeType, image, len(image)); err != nil {
+		return fmt.Errorf("call: %w", err)
+	}
+	if !out {
+		return ErrSavingFile
+	}
+	return nil
+}
+
 type rc struct {
 	wazero.Runtime
 	wazero.CompiledModule
@@ -368,6 +420,8 @@ func (m *module) call(name string, dest any, args ...any) error {
 			params = append(params, uint64(a))
 		case uint64:
 			params = append(params, a)
+		case []byte:
+			params = append(params, uint64(makeBytes(m, a)))
 		case string:
 			params = append(params, uint64(makeString(m, a)))
 		case []string:
@@ -407,6 +461,10 @@ func (m *module) call(name string, dest any, args ...any) error {
 		if result != 0 {
 			*dest = readInts(m, uint32(result), cap(*dest))
 		}
+	case *[]byte:
+		if result != 0 {
+			*dest = readBytes(m, uint32(result))
+		}
 	default:
 		panic(fmt.Sprintf("unknown result type %T", dest))
 	}
@@ -417,6 +475,14 @@ func (m *module) close() {
 	if err := m.mod.Close(context.Background()); err != nil {
 		panic(err)
 	}
+}
+
+func makeBytes(m *module, b []byte) uint32 {
+	ptr := m.malloc(uint32(len(b)))
+	if !m.mod.Memory().Write(ptr, b) {
+		panic("failed to write to mod.module.Memory()")
+	}
+	return ptr
 }
 
 func makeString(m *module, s string) uint32 {
@@ -466,6 +532,30 @@ func readString(m *module, ptr uint32) string {
 		buf = append(buf, next...)
 		size += size
 	}
+}
+
+func readBytes(m *module, ptr uint32) []byte {
+	ret := []byte{} // non nil so call knows if it's just empty
+
+	size, ok := m.mod.Memory().ReadUint32Le(ptr)
+	if !ok {
+		panic("memory error")
+	}
+	if size == 0 {
+		return ret
+	}
+
+	// read the ptr to the struct to get the location of the image data
+	loc, _ := m.mod.Memory().ReadUint32Le(ptr + 4)
+	b, ok := m.mod.Memory().Read(loc, size)
+	if !ok {
+		panic("memory error")
+	}
+
+	// copy the data. "this returns a view of the underlying memory, not a copy." per api.memory.read docs
+	ret = make([]byte, size)
+	copy(ret, b)
+	return ret
 }
 
 func readStrings(m *module, ptr uint32) []string {

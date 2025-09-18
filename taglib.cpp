@@ -14,6 +14,12 @@ TagLib::String to_string(const char *s) {
   return TagLib::String(s, TagLib::String::UTF8);
 }
 
+// size must come first so that we know how much of data to read
+struct ByteData {
+  unsigned int length;
+  char *data;
+};
+
 __attribute__((export_name("malloc"))) void *exported_malloc(size_t size) {
   return malloc(size);
 }
@@ -94,4 +100,57 @@ taglib_file_audioproperties(const char *filename) {
   arr[3] = audioProperties->bitrate();
 
   return arr;
+}
+
+__attribute__((export_name("taglib_file_read_image"))) ByteData *
+taglib_file_read_image(const char *filename) {
+  TagLib::FileRef file(filename);
+  if (file.isNull())
+    return nullptr;
+
+  const auto &pictures = file.complexProperties("PICTURE");
+  if (pictures.isEmpty())
+    return nullptr;
+
+  ByteData *bd = (ByteData *)malloc(sizeof(ByteData));
+  for (const auto &p : pictures) {
+    const auto pictureType = p["pictureType"].toString();
+    if (pictureType == "Front Cover") {
+      auto v = p["data"].toByteVector();
+      if (!v.isEmpty()) {
+        bd->length = unsigned(v.size());
+        bd->data = v.data();
+        return bd;
+      }
+    }
+  }
+
+  // if we couldn't find a front cover, pick a random cover
+  auto v = pictures.front()["data"].toByteVector();
+  bd->length = unsigned(v.size());
+  bd->data = v.data();
+  return bd;
+}
+
+__attribute__((export_name("taglib_file_write_image"))) bool
+taglib_file_write_image(const char *filename, const char *mimeType,
+                        const char *buf, unsigned int length) {
+  TagLib::FileRef file(filename);
+  if (file.isNull())
+    return false;
+
+  if (length == 0) {
+    if (!file.setComplexProperties("PICTURE", {}))
+      return false;
+
+    return file.save();
+  }
+
+  file.setComplexProperties("PICTURE",
+                            {{{"data", TagLib::ByteVector(buf, length)},
+                              {"pictureType", "Front Cover"},
+                              {"mimeType", to_string(mimeType)},
+                              {"description", "Added by go-taglib"}}});
+
+  return file.save();
 }

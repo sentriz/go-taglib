@@ -1,9 +1,11 @@
 package taglib_test
 
 import (
+	"bytes"
 	_ "embed"
 	"errors"
 	"fmt"
+	"image"
 	"maps"
 	"os"
 	"path/filepath"
@@ -13,6 +15,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 
 	"go.senan.xyz/taglib"
 )
@@ -242,6 +248,64 @@ func TestMultiOpen(t *testing.T) {
 	}
 }
 
+func TestReadImage(t *testing.T) {
+	path := tmpf(t, egFLAC, "eg.flac")
+	imgBytes, err := taglib.ReadImage(path)
+	nilErr(t, err)
+	if imgBytes == nil {
+		t.Fatalf("no image")
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgBytes))
+	nilErr(t, err)
+
+	b := img.Bounds()
+	if b.Dx() != 700 || b.Dy() != 700 {
+		t.Fatalf("bad image dimensions: %d, %d != 700, 700", b.Dx(), b.Dy())
+	}
+}
+
+func TestWriteImage(t *testing.T) {
+	path := tmpf(t, egFLAC, "eg.flac")
+
+	err := taglib.WriteImage(path, coverJPG)
+	nilErr(t, err)
+
+	imgBytes, err := taglib.ReadImage(path)
+	nilErr(t, err)
+	if imgBytes == nil {
+		t.Fatalf("no written image")
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgBytes))
+	nilErr(t, err)
+
+	b := img.Bounds()
+	if b.Dx() != 700 || b.Dy() != 700 {
+		t.Fatalf("bad image dimensions: %d, %d != 700, 700", b.Dx(), b.Dy())
+	}
+}
+
+func TestClearImage(t *testing.T) {
+	path := tmpf(t, egFLAC, "eg.flac")
+
+	img, err := taglib.ReadImage(path)
+	nilErr(t, err)
+
+	if img == nil {
+		t.Fatalf("expected image, found none")
+	}
+
+	nilErr(t, taglib.WriteImage(path, nil))
+
+	img, err = taglib.ReadImage(path)
+	nilErr(t, err)
+
+	if img != nil {
+		t.Fatalf("expected no image, found one")
+	}
+}
+
 func TestMemNew(t *testing.T) {
 	t.Parallel()
 
@@ -310,6 +374,8 @@ var (
 	egOgg []byte
 	//go:embed testdata/eg.wav
 	egWAV []byte
+	//go:embed testdata/cover.jpg
+	coverJPG []byte
 )
 
 func testPaths(t testing.TB) []string {
