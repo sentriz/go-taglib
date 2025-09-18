@@ -11,6 +11,7 @@ To reproduce or verify the bundled binary, see the [attestations](https://github
 ## Features
 
 - **Read** and **write** metadata tags for audio files, including support for **multi-valued** tags.
+- **Read** and **write** embedded images (album artwork) from audio files.
 - Retrieve audio properties such as length, bitrate, sample rate, and channels.
 - Supports multiple audio formats including _MP3_, _FLAC_, _M4A_, _WAV_, _OGG_, _WMA_, and more.
 - Safe for concurrent use
@@ -78,6 +79,51 @@ func main() {
     fmt.Printf("Bitrate: %d\n", properties.Bitrate)
     fmt.Printf("SampleRate: %d\n", properties.SampleRate)
     fmt.Printf("Channels: %d\n", properties.Channels)
+}
+```
+
+### Reading embedded images
+
+```go
+import (
+    "bytes"
+    "image"
+
+    _ "image/gif"
+    _ "image/jpeg"
+    _ "image/png"
+
+    // ...
+)
+
+func main() {
+    imageBytes, err := taglib.ReadImage("path/to/audiofile.mp3")
+    // check(err)
+
+    if imageBytes == nil {
+        fmt.Printf("File contains no image")
+        return
+    }
+
+    img, format, err := image.Decode(bytes.NewReader(imageBytes))
+    // check(err)
+
+    fmt.Printf("format: %q\n", format)
+
+    bounds := img.Bounds()
+    fmt.Printf("width: %d\n", bounds.Dx())
+    fmt.Printf("height: %d\n", bounds.Dy())
+}
+```
+
+### Writing embedded images
+
+```go
+func main() {
+    var imageBytes []byte // Some image data, from somewhere
+
+    err = taglib.WriteImage("path/to/audiofile.mp3", imageBytes)
+    // check(err)
 }
 ```
 
