@@ -99,6 +99,9 @@ taglib_file_audioproperties(const char *filename) {
   arr[2] = audioProperties->sampleRate();
   arr[3] = audioProperties->bitrate();
 
+  const auto &pictures = file.complexProperties("PICTURE");
+  arr[4] = pictures.isEmpty() ? 0 : 1;
+
   return arr;
 }
 

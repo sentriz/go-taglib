@@ -179,6 +179,8 @@ type Properties struct {
 	SampleRate uint
 	// Bitrate in kbit/s
 	Bitrate uint
+	// HasImage indicates whether the file contains embedded images
+	HasImage bool
 }
 
 // ReadProperties reads the audio properties from a file at the given path.
@@ -201,6 +203,7 @@ func ReadProperties(path string) (Properties, error) {
 		audioPropertyChannels
 		audioPropertySampleRate
 		audioPropertyBitrate
+		audioPropertyHasImage
 		audioPropertyLen
 	)
 
@@ -214,6 +217,7 @@ func ReadProperties(path string) (Properties, error) {
 		Channels:   uint(raw[audioPropertyChannels]),
 		SampleRate: uint(raw[audioPropertySampleRate]),
 		Bitrate:    uint(raw[audioPropertyBitrate]),
+		HasImage:   raw[audioPropertyHasImage] == 1,
 	}, nil
 }
 

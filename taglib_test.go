@@ -250,6 +250,11 @@ func TestMultiOpen(t *testing.T) {
 
 func TestReadImage(t *testing.T) {
 	path := tmpf(t, egFLAC, "eg.flac")
+
+	properties, err := taglib.ReadProperties(path)
+	nilErr(t, err)
+	eq(t, properties.HasImage, true)
+
 	imgBytes, err := taglib.ReadImage(path)
 	nilErr(t, err)
 	if imgBytes == nil {
