@@ -14,12 +14,6 @@ TagLib::String to_string(const char *s) {
   return TagLib::String(s, TagLib::String::UTF8);
 }
 
-// size must come first so that we know how much of data to read
-struct ByteData {
-  unsigned int length;
-  char *data;
-};
-
 __attribute__((export_name("malloc"))) void *exported_malloc(size_t size) {
   return malloc(size);
 }
@@ -83,30 +77,61 @@ taglib_file_write_tags(const char *filename, const char **tags, uint8_t opts) {
   return file.save();
 }
 
-__attribute__((export_name("taglib_file_audioproperties"))) int *
+struct FileProperties {
+  unsigned int lengthInMilliseconds;
+  unsigned int channels;
+  unsigned int sampleRate;
+  unsigned int bitrate;
+  char **imageMetadata;
+};
+
+__attribute__((export_name("taglib_file_read_properties"))) FileProperties *
 taglib_file_audioproperties(const char *filename) {
   TagLib::FileRef file(filename);
   if (file.isNull() || !file.audioProperties())
     return nullptr;
 
-  int *arr = static_cast<int *>(malloc(4 * sizeof(int)));
-  if (!arr)
+  FileProperties *props = static_cast<FileProperties *>(malloc(sizeof(FileProperties)));
+  if (!props)
     return nullptr;
 
   auto audioProperties = file.audioProperties();
-  arr[0] = audioProperties->lengthInMilliseconds();
-  arr[1] = audioProperties->channels();
-  arr[2] = audioProperties->sampleRate();
-  arr[3] = audioProperties->bitrate();
+  props->lengthInMilliseconds = audioProperties->lengthInMilliseconds();
+  props->channels = audioProperties->channels();
+  props->sampleRate = audioProperties->sampleRate();
+  props->bitrate = audioProperties->bitrate();
 
   const auto &pictures = file.complexProperties("PICTURE");
-  arr[4] = pictures.isEmpty() ? 0 : 1;
 
-  return arr;
+  props->imageMetadata = nullptr;
+  if (!pictures.isEmpty()) {
+    size_t len = pictures.size();
+    char **imageMetadata = static_cast<char **>(malloc(sizeof(char *) * (len + 1)));
+    if (imageMetadata) {
+      size_t i = 0;
+      for (const auto &p : pictures) {
+        TagLib::String type = p["pictureType"].toString();
+        TagLib::String desc = p["description"].toString();
+        TagLib::String mime = p["mimeType"].toString();
+        TagLib::String row = type + "\t" + desc + "\t" + mime;
+        imageMetadata[i] = to_char_array(row);
+        i++;
+      }
+      imageMetadata[len] = nullptr;
+      props->imageMetadata = imageMetadata;
+    }
+  }
+
+  return props;
 }
 
+struct ByteData {
+  unsigned int length;
+  char *data;
+};
+
 __attribute__((export_name("taglib_file_read_image"))) ByteData *
-taglib_file_read_image(const char *filename) {
+taglib_file_read_image(const char *filename, int index) {
   TagLib::FileRef file(filename);
   if (file.isNull())
     return nullptr;
@@ -115,29 +140,24 @@ taglib_file_read_image(const char *filename) {
   if (pictures.isEmpty())
     return nullptr;
 
-  ByteData *bd = (ByteData *)malloc(sizeof(ByteData));
-  for (const auto &p : pictures) {
-    const auto pictureType = p["pictureType"].toString();
-    if (pictureType == "Front Cover") {
-      auto v = p["data"].toByteVector();
-      if (!v.isEmpty()) {
-        bd->length = unsigned(v.size());
-        bd->data = v.data();
-        return bd;
-      }
-    }
-  }
+  if (index < 0 || index >= static_cast<int>(pictures.size()))
+    return nullptr;
 
-  // if we couldn't find a front cover, pick a random cover
-  auto v = pictures.front()["data"].toByteVector();
+  ByteData *bd = static_cast<ByteData *>(malloc(sizeof(ByteData)));
+  if (!bd)
+    return nullptr;
+
+  auto v = pictures[index]["data"].toByteVector();
   bd->length = unsigned(v.size());
   bd->data = v.data();
   return bd;
 }
 
 __attribute__((export_name("taglib_file_write_image"))) bool
-taglib_file_write_image(const char *filename, const char *mimeType,
-                        const char *buf, unsigned int length) {
+taglib_file_write_image(const char *filename, const char *buf,
+                        unsigned int length, int index,
+                        const char *pictureType, const char *description,
+                        const char *mimeType) {
   TagLib::FileRef file(filename);
   if (file.isNull())
     return false;
@@ -149,11 +169,23 @@ taglib_file_write_image(const char *filename, const char *mimeType,
     return file.save();
   }
 
-  file.setComplexProperties("PICTURE",
-                            {{{"data", TagLib::ByteVector(buf, length)},
-                              {"pictureType", "Front Cover"},
-                              {"mimeType", to_string(mimeType)},
-                              {"description", "Added by go-taglib"}}});
+  auto pictures = file.complexProperties("PICTURE");
+
+  TagLib::VariantMap newPicture;
+  newPicture["data"] = TagLib::ByteVector(buf, length);
+  newPicture["pictureType"] = to_string(pictureType);
+  newPicture["description"] = to_string(description);
+  newPicture["mimeType"] = to_string(mimeType);
+
+  // Replace image at index, or append if index is out of range
+  if (index >= 0 && index < static_cast<int>(pictures.size())) {
+    pictures[index] = newPicture;
+  } else {
+    pictures.append(newPicture);
+  }
+
+  if (!file.setComplexProperties("PICTURE", pictures))
+    return false;
 
   return file.save();
 }

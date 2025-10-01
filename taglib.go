@@ -5,7 +5,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,8 +178,18 @@ type Properties struct {
 	SampleRate uint
 	// Bitrate in kbit/s
 	Bitrate uint
-	// HasImage indicates whether the file contains embedded images
-	HasImage bool
+	// Images contains metadata about all embedded images
+	Images []ImageDesc
+}
+
+// ImageDesc contains metadata about an embedded image without the actual image data.
+type ImageDesc struct {
+	// Type is the picture type (e.g., "Front Cover", "Back Cover")
+	Type string
+	// Description is a textual description of the image
+	Description string
+	// MimeType is the MIME type of the image (e.g., "image/jpeg")
+	MimeType string
 }
 
 // ReadProperties reads the audio properties from a file at the given path.
@@ -198,26 +207,29 @@ func ReadProperties(path string) (Properties, error) {
 	}
 	defer mod.close()
 
-	const (
-		audioPropertyLengthInMilliseconds = iota
-		audioPropertyChannels
-		audioPropertySampleRate
-		audioPropertyBitrate
-		audioPropertyHasImage
-		audioPropertyLen
-	)
-
-	raw := make(wasmInts, 0, audioPropertyLen)
-	if err := mod.call("taglib_file_audioproperties", &raw, wasmString(wasmPath(path))); err != nil {
+	var raw wasmFileProperties
+	if err := mod.call("taglib_file_read_properties", &raw, wasmString(wasmPath(path))); err != nil {
 		return Properties{}, fmt.Errorf("call: %w", err)
 	}
 
+	var images []ImageDesc
+	for _, row := range raw.imageDescs {
+		parts := strings.SplitN(row, "\t", 3)
+		if len(parts) == 3 {
+			images = append(images, ImageDesc{
+				Type:        parts[0],
+				Description: parts[1],
+				MimeType:    parts[2],
+			})
+		}
+	}
+
 	return Properties{
-		Length:     time.Duration(raw[audioPropertyLengthInMilliseconds]) * time.Millisecond,
-		Channels:   uint(raw[audioPropertyChannels]),
-		SampleRate: uint(raw[audioPropertySampleRate]),
-		Bitrate:    uint(raw[audioPropertyBitrate]),
-		HasImage:   raw[audioPropertyHasImage] == 1,
+		Length:     time.Duration(raw.lengthInMilliseconds) * time.Millisecond,
+		Channels:   uint(raw.channels),
+		SampleRate: uint(raw.sampleRate),
+		Bitrate:    uint(raw.bitrate),
+		Images:     images,
 	}, nil
 }
 
@@ -259,8 +271,23 @@ func WriteTags(path string, tags map[string][]string, opts WriteOption) error {
 	return nil
 }
 
-// ReadImage reads the first available embedded image bytes from path, returning nil if there are no images in the file.
+// ReadImage reads the first embedded image from path. Returns empty byte slice if no images exist.
 func ReadImage(path string) ([]byte, error) {
+	return ReadImageOptions(path, 0)
+}
+
+// WriteImage writes image as an embedded "Front Cover" at index 0 with auto-detected MIME type.
+func WriteImage(path string, image []byte) error {
+	mimeType := ""
+	if image != nil {
+		mimeType = detectImageMimeType(image)
+	}
+	return WriteImageOptions(path, image, 0, "Front Cover", "Added by go-taglib", mimeType)
+}
+
+// ReadImageOptions reads the embedded image at the specified index from path.
+// Index 0 is the first image. Returns empty byte slice if index is out of range.
+func ReadImageOptions(path string, index int) ([]byte, error) {
 	var err error
 	path, err = filepath.Abs(path)
 	if err != nil {
@@ -274,15 +301,16 @@ func ReadImage(path string) ([]byte, error) {
 	defer mod.close()
 
 	var img wasmBytes
-	if err := mod.call("taglib_file_read_image", &img, wasmString(wasmPath(path))); err != nil {
+	if err := mod.call("taglib_file_read_image", &img, wasmString(wasmPath(path)), wasmInt(index)); err != nil {
 		return nil, fmt.Errorf("call: %w", err)
 	}
 
 	return img, nil
 }
 
-// WriteImage writes image as an embedded image to path.
-func WriteImage(path string, image []byte) error {
+// WriteImageOptions writes an image with custom metadata.
+// Index specifies which image slot to write to (0 = first image).
+func WriteImageOptions(path string, image []byte, index int, imageType, description, mimeType string) error {
 	var err error
 	path, err = filepath.Abs(path)
 	if err != nil {
@@ -295,13 +323,8 @@ func WriteImage(path string, image []byte) error {
 	}
 	defer mod.close()
 
-	var mimeType string
-	if image != nil {
-		mimeType = http.DetectContentType(image)
-	}
-
 	var out wasmBool
-	if err := mod.call("taglib_file_write_image", &out, wasmString(wasmPath(path)), wasmString(mimeType), wasmBytes(image), wasmInt(len(image))); err != nil {
+	if err := mod.call("taglib_file_write_image", &out, wasmString(wasmPath(path)), wasmBytes(image), wasmInt(len(image)), wasmInt(index), wasmString(imageType), wasmString(description), wasmString(mimeType)); err != nil {
 		return fmt.Errorf("call: %w", err)
 	}
 	if !out {
@@ -506,11 +529,28 @@ func (s *wasmStrings) fromWasm(m *module, val uint64) {
 	}
 }
 
-type wasmInts []int
+type wasmFileProperties struct {
+	lengthInMilliseconds uint32
+	channels             uint32
+	sampleRate           uint32
+	bitrate              uint32
+	imageDescs           []string
+}
 
-func (i *wasmInts) fromWasm(m *module, val uint64) {
-	if val != 0 {
-		*i = readInts(m, uint32(val), cap(*i))
+func (f *wasmFileProperties) fromWasm(m *module, val uint64) {
+	if val == 0 {
+		return
+	}
+	ptr := uint32(val)
+
+	f.lengthInMilliseconds, _ = m.mod.Memory().ReadUint32Le(ptr)
+	f.channels, _ = m.mod.Memory().ReadUint32Le(ptr + 4)
+	f.sampleRate, _ = m.mod.Memory().ReadUint32Le(ptr + 8)
+	f.bitrate, _ = m.mod.Memory().ReadUint32Le(ptr + 12)
+
+	imageMetadataPtr, _ := m.mod.Memory().ReadUint32Le(ptr + 16)
+	if imageMetadataPtr != 0 {
+		f.imageDescs = readStrings(m, imageMetadataPtr)
 	}
 }
 
@@ -536,6 +576,23 @@ func (m *module) close() {
 	if err := m.mod.Close(context.Background()); err != nil {
 		panic(err)
 	}
+}
+
+func readStrings(m *module, ptr uint32) []string {
+	strs := []string{} // non nil so call knows if it's just empty
+	for {
+		stringPtr, ok := m.mod.Memory().ReadUint32Le(ptr)
+		if !ok {
+			panic("memory error")
+		}
+		if stringPtr == 0 {
+			break
+		}
+		str := readString(m, stringPtr)
+		strs = append(strs, str)
+		ptr += 4
+	}
+	return strs
 }
 
 func readString(m *module, ptr uint32) string {
@@ -577,42 +634,41 @@ func readBytes(m *module, ptr uint32) []byte {
 		panic("memory error")
 	}
 
-	// copy the data. "this returns a view of the underlying memory, not a copy." per api.memory.read docs
+	// copy the data, "this returns a view of the underlying memory, not a copy." per api.memory.read docs
 	ret = make([]byte, size)
 	copy(ret, b)
 	return ret
 }
 
-func readStrings(m *module, ptr uint32) []string {
-	strs := []string{} // non nil so call knows if it's just empty
-	for {
-		stringPtr, ok := m.mod.Memory().ReadUint32Le(ptr)
-		if !ok {
-			panic("memory error")
-		}
-		if stringPtr == 0 {
-			break
-		}
-		str := readString(m, stringPtr)
-		strs = append(strs, str)
-		ptr += 4
-	}
-	return strs
-}
-
-func readInts(m *module, ptr uint32, len int) []int {
-	ints := make([]int, 0, len)
-	for i := range len {
-		i, ok := m.mod.Memory().ReadUint32Le(ptr + uint32(4*i))
-		if !ok {
-			panic("memory error")
-		}
-		ints = append(ints, int(i))
-	}
-	return ints
-}
-
 // WASI uses POSIXy paths, even on Windows
 func wasmPath(p string) string {
 	return filepath.ToSlash(p)
+}
+
+// detectImageMimeType detects image MIME type from magic bytes.
+// Adapted from Go's net/http package to avoid the dependency.
+func detectImageMimeType(data []byte) string {
+	if len(data) < 2 {
+		return ""
+	}
+	switch {
+	case len(data) >= 4 && bytes.Equal(data[:4], []byte("\x00\x00\x01\x00")):
+		return "image/x-icon"
+	case len(data) >= 4 && bytes.Equal(data[:4], []byte("\x00\x00\x02\x00")):
+		return "image/x-icon"
+	case bytes.HasPrefix(data, []byte("BM")):
+		return "image/bmp"
+	case bytes.HasPrefix(data, []byte("GIF87a")):
+		return "image/gif"
+	case bytes.HasPrefix(data, []byte("GIF89a")):
+		return "image/gif"
+	case len(data) >= 8 && bytes.Equal(data[:8], []byte("\x89PNG\x0D\x0A\x1A\x0A")):
+		return "image/png"
+	case len(data) >= 3 && bytes.Equal(data[:3], []byte("\xFF\xD8\xFF")):
+		return "image/jpeg"
+	case len(data) >= 14 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:14], []byte("WEBPVP")):
+		return "image/webp"
+	default:
+		return ""
+	}
 }

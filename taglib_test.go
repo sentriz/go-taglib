@@ -219,7 +219,7 @@ func TestConcurrent(t *testing.T) {
 	nilErr(t, err)
 }
 
-func TestAudioProperties(t *testing.T) {
+func TestProperties(t *testing.T) {
 	t.Parallel()
 
 	path := tmpf(t, egFLAC, "eg.flac")
@@ -231,6 +231,14 @@ func TestAudioProperties(t *testing.T) {
 	eq(t, 1460, properties.Bitrate)
 	eq(t, 48_000, properties.SampleRate)
 	eq(t, 2, properties.Channels)
+
+	eq(t, len(properties.Images), 2)
+	eq(t, properties.Images[0].Type, "Front Cover")
+	eq(t, properties.Images[0].Description, "The first image")
+	eq(t, properties.Images[0].MimeType, "image/png")
+	eq(t, properties.Images[1].Type, "Lead Artist")
+	eq(t, properties.Images[1].Description, "The second image")
+	eq(t, properties.Images[1].MimeType, "image/jpeg")
 }
 
 func TestMultiOpen(t *testing.T) {
@@ -253,7 +261,7 @@ func TestReadImage(t *testing.T) {
 
 	properties, err := taglib.ReadProperties(path)
 	nilErr(t, err)
-	eq(t, properties.HasImage, true)
+	eq(t, len(properties.Images) > 0, true)
 
 	imgBytes, err := taglib.ReadImage(path)
 	nilErr(t, err)
