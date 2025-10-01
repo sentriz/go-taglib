@@ -79,6 +79,12 @@ func main() {
     fmt.Printf("Bitrate: %d\n", properties.Bitrate)
     fmt.Printf("SampleRate: %d\n", properties.SampleRate)
     fmt.Printf("Channels: %d\n", properties.Channels)
+
+    // Image metadata (without reading actual image data)
+    for i, img := range properties.Images {
+        fmt.Printf("Image %d - Type: %s, Description: %s, MIME type: %s\n",
+            i, img.Type, img.Description, img.MimeType)
+    }
 }
 ```
 
@@ -97,6 +103,7 @@ import (
 )
 
 func main() {
+    // Read first image (index 0)
     imageBytes, err := taglib.ReadImage("path/to/audiofile.mp3")
     // check(err)
 
@@ -113,6 +120,10 @@ func main() {
     bounds := img.Bounds()
     fmt.Printf("width: %d\n", bounds.Dx())
     fmt.Printf("height: %d\n", bounds.Dy())
+
+    // Read a specific image by index
+    backCover, err := taglib.ReadImageOptions("path/to/audiofile.mp3", 1)
+    // check(err)
 }
 ```
 
@@ -122,7 +133,19 @@ func main() {
 func main() {
     var imageBytes []byte // Some image data, from somewhere
 
+    // Write as front cover with auto-detected MIME type
     err = taglib.WriteImage("path/to/audiofile.mp3", imageBytes)
+    // check(err)
+
+    // Write with custom options
+    err = taglib.WriteImageOptions(
+        "path/to/audiofile.mp3",
+        imageBytes,
+        0,                  // replaces image at index; use higher index to append
+        "Back Cover",       // picture type
+        "Back artwork",     // description
+        "image/jpeg",       // MIME type
+    )
     // check(err)
 }
 ```
