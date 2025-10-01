@@ -1,4 +1,5 @@
 //go:build ignore
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 
@@ -78,20 +79,21 @@ taglib_file_write_tags(const char *filename, const char **tags, uint8_t opts) {
 }
 
 struct FileProperties {
-  unsigned int lengthInMilliseconds;
-  unsigned int channels;
-  unsigned int sampleRate;
-  unsigned int bitrate;
+  uint32_t lengthInMilliseconds;
+  uint32_t channels;
+  uint32_t sampleRate;
+  uint32_t bitrate;
   char **imageMetadata;
 };
 
 __attribute__((export_name("taglib_file_read_properties"))) FileProperties *
-taglib_file_audioproperties(const char *filename) {
+taglib_file_read_properties(const char *filename) {
   TagLib::FileRef file(filename);
   if (file.isNull() || !file.audioProperties())
     return nullptr;
 
-  FileProperties *props = static_cast<FileProperties *>(malloc(sizeof(FileProperties)));
+  FileProperties *props =
+      static_cast<FileProperties *>(malloc(sizeof(FileProperties)));
   if (!props)
     return nullptr;
 
@@ -106,7 +108,8 @@ taglib_file_audioproperties(const char *filename) {
   props->imageMetadata = nullptr;
   if (!pictures.isEmpty()) {
     size_t len = pictures.size();
-    char **imageMetadata = static_cast<char **>(malloc(sizeof(char *) * (len + 1)));
+    char **imageMetadata =
+        static_cast<char **>(malloc(sizeof(char *) * (len + 1)));
     if (imageMetadata) {
       size_t i = 0;
       for (const auto &p : pictures) {
@@ -126,7 +129,7 @@ taglib_file_audioproperties(const char *filename) {
 }
 
 struct ByteData {
-  unsigned int length;
+  uint32_t length;
   char *data;
 };
 
@@ -143,21 +146,32 @@ taglib_file_read_image(const char *filename, int index) {
   if (index < 0 || index >= static_cast<int>(pictures.size()))
     return nullptr;
 
+  auto v = pictures[index]["data"].toByteVector();
   ByteData *bd = static_cast<ByteData *>(malloc(sizeof(ByteData)));
   if (!bd)
     return nullptr;
 
-  auto v = pictures[index]["data"].toByteVector();
-  bd->length = unsigned(v.size());
-  bd->data = v.data();
+  bd->length = static_cast<uint32_t>(v.size());
+  if (bd->length == 0) {
+    bd->data = nullptr;
+    return bd;
+  }
+
+  // allocate and copy into module memory to keep it valid for go to read
+  char *buf = static_cast<char *>(malloc(bd->length));
+  if (!buf)
+    return nullptr;
+
+  memcpy(buf, v.data(), bd->length);
+  bd->data = buf;
+
   return bd;
 }
 
 __attribute__((export_name("taglib_file_write_image"))) bool
-taglib_file_write_image(const char *filename, const char *buf,
-                        unsigned int length, int index,
-                        const char *pictureType, const char *description,
-                        const char *mimeType) {
+taglib_file_write_image(const char *filename, const char *buf, uint32_t length,
+                        int index, const char *pictureType,
+                        const char *description, const char *mimeType) {
   TagLib::FileRef file(filename);
   if (file.isNull())
     return false;
@@ -177,12 +191,11 @@ taglib_file_write_image(const char *filename, const char *buf,
   newPicture["description"] = to_string(description);
   newPicture["mimeType"] = to_string(mimeType);
 
-  // Replace image at index, or append if index is out of range
-  if (index >= 0 && index < static_cast<int>(pictures.size())) {
+  // replace image at index, or append if index is out of range
+  if (index >= 0 && index < static_cast<int>(pictures.size()))
     pictures[index] = newPicture;
-  } else {
+  else
     pictures.append(newPicture);
-  }
 
   if (!file.setComplexProperties("PICTURE", pictures))
     return false;
