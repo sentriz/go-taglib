@@ -188,8 +188,8 @@ type ImageDesc struct {
 	Type string
 	// Description is a textual description of the image
 	Description string
-	// MimeType is the MIME type of the image (e.g., "image/jpeg")
-	MimeType string
+	// MIMEType is the MIME type of the image (e.g., "image/jpeg")
+	MIMEType string
 }
 
 // ReadProperties reads the audio properties from a file at the given path.
@@ -215,13 +215,14 @@ func ReadProperties(path string) (Properties, error) {
 	var images []ImageDesc
 	for _, row := range raw.imageDescs {
 		parts := strings.SplitN(row, "\t", 3)
-		if len(parts) == 3 {
-			images = append(images, ImageDesc{
-				Type:        parts[0],
-				Description: parts[1],
-				MimeType:    parts[2],
-			})
+		if len(parts) != 3 {
+			continue
 		}
+		images = append(images, ImageDesc{
+			Type:        parts[0],
+			Description: parts[1],
+			MIMEType:    parts[2],
+		})
 	}
 
 	return Properties{
@@ -280,7 +281,7 @@ func ReadImage(path string) ([]byte, error) {
 func WriteImage(path string, image []byte) error {
 	mimeType := ""
 	if image != nil {
-		mimeType = detectImageMimeType(image)
+		mimeType = detectImageMIME(image)
 	}
 	return WriteImageOptions(path, image, 0, "Front Cover", "Added by go-taglib", mimeType)
 }
@@ -430,49 +431,47 @@ func (m *module) malloc(size uint32) uint32 {
 }
 
 type wasmArg interface {
-	toWasm(*module) uint64
+	encode(*module) uint64
 }
 
 type wasmResult interface {
-	fromWasm(*module, uint64)
+	decode(*module, uint64)
 }
 
 type wasmBool bool
 
-func (b wasmBool) toWasm(*module) uint64 {
+func (b wasmBool) encode(*module) uint64 {
 	if b {
 		return 1
 	}
 	return 0
 }
 
-func (b *wasmBool) fromWasm(_ *module, val uint64) {
+func (b *wasmBool) decode(_ *module, val uint64) {
 	*b = val == 1
 }
 
 type wasmInt int
 
-func (i wasmInt) toWasm(*module) uint64 { return uint64(i) }
-
-func (i *wasmInt) fromWasm(_ *module, val uint64) {
+func (i wasmInt) encode(*module) uint64 { return uint64(i) }
+func (i *wasmInt) decode(_ *module, val uint64) {
 	*i = wasmInt(val)
 }
 
 type wasmUint8 uint8
 
-func (u wasmUint8) toWasm(*module) uint64 { return uint64(u) }
+func (u wasmUint8) encode(*module) uint64 { return uint64(u) }
 
 type wasmUint32 uint32
 
-func (u wasmUint32) toWasm(*module) uint64 { return uint64(u) }
-
-func (u *wasmUint32) fromWasm(_ *module, val uint64) {
+func (u wasmUint32) encode(*module) uint64 { return uint64(u) }
+func (u *wasmUint32) decode(_ *module, val uint64) {
 	*u = wasmUint32(val)
 }
 
 type wasmString string
 
-func (s wasmString) toWasm(m *module) uint64 {
+func (s wasmString) encode(m *module) uint64 {
 	b := append([]byte(s), 0)
 	ptr := m.malloc(uint32(len(b)))
 	if !m.mod.Memory().Write(ptr, b) {
@@ -480,8 +479,7 @@ func (s wasmString) toWasm(m *module) uint64 {
 	}
 	return uint64(ptr)
 }
-
-func (s *wasmString) fromWasm(m *module, val uint64) {
+func (s *wasmString) decode(m *module, val uint64) {
 	if val != 0 {
 		*s = wasmString(readString(m, uint32(val)))
 	}
@@ -489,15 +487,14 @@ func (s *wasmString) fromWasm(m *module, val uint64) {
 
 type wasmBytes []byte
 
-func (b wasmBytes) toWasm(m *module) uint64 {
+func (b wasmBytes) encode(m *module) uint64 {
 	ptr := m.malloc(uint32(len(b)))
 	if !m.mod.Memory().Write(ptr, b) {
 		panic("failed to write to mod.module.Memory()")
 	}
 	return uint64(ptr)
 }
-
-func (b *wasmBytes) fromWasm(m *module, val uint64) {
+func (b *wasmBytes) decode(m *module, val uint64) {
 	if val != 0 {
 		*b = readBytes(m, uint32(val))
 	}
@@ -505,7 +502,7 @@ func (b *wasmBytes) fromWasm(m *module, val uint64) {
 
 type wasmStrings []string
 
-func (s wasmStrings) toWasm(m *module) uint64 {
+func (s wasmStrings) encode(m *module) uint64 {
 	arrayPtr := m.malloc(uint32((len(s) + 1) * 4))
 	for i, str := range s {
 		b := append([]byte(str), 0)
@@ -522,8 +519,7 @@ func (s wasmStrings) toWasm(m *module) uint64 {
 	}
 	return uint64(arrayPtr)
 }
-
-func (s *wasmStrings) fromWasm(m *module, val uint64) {
+func (s *wasmStrings) decode(m *module, val uint64) {
 	if val != 0 {
 		*s = readStrings(m, uint32(val))
 	}
@@ -537,7 +533,7 @@ type wasmFileProperties struct {
 	imageDescs           []string
 }
 
-func (f *wasmFileProperties) fromWasm(m *module, val uint64) {
+func (f *wasmFileProperties) decode(m *module, val uint64) {
 	if val == 0 {
 		return
 	}
@@ -557,7 +553,7 @@ func (f *wasmFileProperties) fromWasm(m *module, val uint64) {
 func (m *module) call(name string, dest wasmResult, args ...wasmArg) error {
 	params := make([]uint64, 0, len(args))
 	for _, a := range args {
-		params = append(params, a.toWasm(m))
+		params = append(params, a.encode(m))
 	}
 
 	results, err := m.mod.ExportedFunction(name).Call(context.Background(), params...)
@@ -568,7 +564,7 @@ func (m *module) call(name string, dest wasmResult, args ...wasmArg) error {
 		return nil
 	}
 
-	dest.fromWasm(m, results[0])
+	dest.decode(m, results[0])
 	return nil
 }
 
@@ -604,6 +600,7 @@ func readString(m *module, ptr uint32) string {
 	if i := bytes.IndexByte(buf, 0); i >= 0 {
 		return string(buf[:i])
 	}
+
 	for {
 		next, ok := m.mod.Memory().Read(ptr+size, size)
 		if !ok {
@@ -634,9 +631,10 @@ func readBytes(m *module, ptr uint32) []byte {
 		panic("memory error")
 	}
 
-	// copy the data, "this returns a view of the underlying memory, not a copy." per api.memory.read docs
+	// copy the data, "this returns a view of the underlying memory, not a copy" per api.Memory.Read docs
 	ret = make([]byte, size)
 	copy(ret, b)
+
 	return ret
 }
 
@@ -645,9 +643,9 @@ func wasmPath(p string) string {
 	return filepath.ToSlash(p)
 }
 
-// detectImageMimeType detects image MIME type from magic bytes.
+// detectImageMIME detects image MIME type from magic bytes.
 // Adapted from Go's net/http package to avoid the dependency.
-func detectImageMimeType(data []byte) string {
+func detectImageMIME(data []byte) string {
 	if len(data) < 2 {
 		return ""
 	}

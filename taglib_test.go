@@ -235,10 +235,10 @@ func TestProperties(t *testing.T) {
 	eq(t, len(properties.Images), 2)
 	eq(t, properties.Images[0].Type, "Front Cover")
 	eq(t, properties.Images[0].Description, "The first image")
-	eq(t, properties.Images[0].MimeType, "image/png")
+	eq(t, properties.Images[0].MIMEType, "image/png")
 	eq(t, properties.Images[1].Type, "Lead Artist")
 	eq(t, properties.Images[1].Description, "The second image")
-	eq(t, properties.Images[1].MimeType, "image/jpeg")
+	eq(t, properties.Images[1].MIMEType, "image/jpeg")
 }
 
 func TestMultiOpen(t *testing.T) {

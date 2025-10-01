@@ -106,24 +106,27 @@ taglib_file_read_properties(const char *filename) {
   const auto &pictures = file.complexProperties("PICTURE");
 
   props->imageMetadata = nullptr;
-  if (!pictures.isEmpty()) {
-    size_t len = pictures.size();
-    char **imageMetadata =
-        static_cast<char **>(malloc(sizeof(char *) * (len + 1)));
-    if (imageMetadata) {
-      size_t i = 0;
-      for (const auto &p : pictures) {
-        TagLib::String type = p["pictureType"].toString();
-        TagLib::String desc = p["description"].toString();
-        TagLib::String mime = p["mimeType"].toString();
-        TagLib::String row = type + "\t" + desc + "\t" + mime;
-        imageMetadata[i] = to_char_array(row);
-        i++;
-      }
-      imageMetadata[len] = nullptr;
-      props->imageMetadata = imageMetadata;
-    }
+  if (pictures.isEmpty())
+    return props;
+
+  size_t len = pictures.size();
+  char **imageMetadata =
+      static_cast<char **>(malloc(sizeof(char *) * (len + 1)));
+  if (!imageMetadata)
+    return props;
+
+  size_t i = 0;
+  for (const auto &p : pictures) {
+    TagLib::String type = p["pictureType"].toString();
+    TagLib::String desc = p["description"].toString();
+    TagLib::String mime = p["mimeType"].toString();
+    TagLib::String row = type + "\t" + desc + "\t" + mime;
+    imageMetadata[i] = to_char_array(row);
+    i++;
   }
+  imageMetadata[len] = nullptr;
+
+  props->imageMetadata = imageMetadata;
 
   return props;
 }

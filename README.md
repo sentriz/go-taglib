@@ -83,7 +83,7 @@ func main() {
     // Image metadata (without reading actual image data)
     for i, img := range properties.Images {
         fmt.Printf("Image %d - Type: %s, Description: %s, MIME type: %s\n",
-            i, img.Type, img.Description, img.MimeType)
+            i, img.Type, img.Description, img.MIMEType)
     }
 }
 ```
