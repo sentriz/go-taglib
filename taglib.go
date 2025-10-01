@@ -150,8 +150,8 @@ func ReadTags(path string) (map[string][]string, error) {
 	}
 	defer mod.close()
 
-	var raw []string
-	if err := mod.call("taglib_file_tags", &raw, wasmPath(path)); err != nil {
+	var raw wasmStrings
+	if err := mod.call("taglib_file_tags", &raw, wasmString(wasmPath(path))); err != nil {
 		return nil, fmt.Errorf("call: %w", err)
 	}
 	if raw == nil {
@@ -207,8 +207,8 @@ func ReadProperties(path string) (Properties, error) {
 		audioPropertyLen
 	)
 
-	raw := make([]int, 0, audioPropertyLen)
-	if err := mod.call("taglib_file_audioproperties", &raw, wasmPath(path)); err != nil {
+	raw := make(wasmInts, 0, audioPropertyLen)
+	if err := mod.call("taglib_file_audioproperties", &raw, wasmString(wasmPath(path))); err != nil {
 		return Properties{}, fmt.Errorf("call: %w", err)
 	}
 
@@ -249,8 +249,8 @@ func WriteTags(path string, tags map[string][]string, opts WriteOption) error {
 		raw = append(raw, fmt.Sprintf("%s\t%s", k, strings.Join(vs, "\v")))
 	}
 
-	var out bool
-	if err := mod.call("taglib_file_write_tags", &out, wasmPath(path), raw, uint8(opts)); err != nil {
+	var out wasmBool
+	if err := mod.call("taglib_file_write_tags", &out, wasmString(wasmPath(path)), wasmStrings(raw), wasmUint8(opts)); err != nil {
 		return fmt.Errorf("call: %w", err)
 	}
 	if !out {
@@ -273,8 +273,8 @@ func ReadImage(path string) ([]byte, error) {
 	}
 	defer mod.close()
 
-	var img []byte
-	if err := mod.call("taglib_file_read_image", &img, wasmPath(path)); err != nil {
+	var img wasmBytes
+	if err := mod.call("taglib_file_read_image", &img, wasmString(wasmPath(path))); err != nil {
 		return nil, fmt.Errorf("call: %w", err)
 	}
 
@@ -300,8 +300,8 @@ func WriteImage(path string, image []byte) error {
 		mimeType = http.DetectContentType(image)
 	}
 
-	var out bool
-	if err := mod.call("taglib_file_write_image", &out, wasmPath(path), mimeType, image, len(image)); err != nil {
+	var out wasmBool
+	if err := mod.call("taglib_file_write_image", &out, wasmString(wasmPath(path)), wasmString(mimeType), wasmBytes(image), wasmInt(len(image))); err != nil {
 		return fmt.Errorf("call: %w", err)
 	}
 	if !out {
@@ -396,112 +396,96 @@ func newModuleOpt(dir string, readOnly bool) (module, error) {
 }
 
 func (m *module) malloc(size uint32) uint32 {
-	var ptr uint32
-	if err := m.call("malloc", &ptr, size); err != nil {
+	var ptr wasmUint32
+	if err := m.call("malloc", &ptr, wasmUint32(size)); err != nil {
 		panic(err)
 	}
 	if ptr == 0 {
 		panic("no ptr")
 	}
-	return ptr
+	return uint32(ptr)
 }
 
-func (m *module) call(name string, dest any, args ...any) error {
-	params := make([]uint64, 0, len(args))
-	for _, a := range args {
-		switch a := a.(type) {
-		case bool:
-			if a {
-				params = append(params, 1)
-			} else {
-				params = append(params, 0)
-			}
-		case int:
-			params = append(params, uint64(a))
-		case uint8:
-			params = append(params, uint64(a))
-		case uint32:
-			params = append(params, uint64(a))
-		case uint64:
-			params = append(params, a)
-		case []byte:
-			params = append(params, uint64(makeBytes(m, a)))
-		case string:
-			params = append(params, uint64(makeString(m, a)))
-		case []string:
-			params = append(params, uint64(makeStrings(m, a)))
-		default:
-			panic(fmt.Sprintf("unknown argument type %T", a))
-		}
-	}
-
-	results, err := m.mod.ExportedFunction(name).Call(context.Background(), params...)
-	if err != nil {
-		return fmt.Errorf("call %q: %w", name, err)
-	}
-	if len(results) == 0 {
-		return nil
-	}
-	result := results[0]
-
-	switch dest := dest.(type) {
-	case *int:
-		*dest = int(result)
-	case *uint32:
-		*dest = uint32(result)
-	case *uint64:
-		*dest = uint64(result)
-	case *bool:
-		*dest = result == 1
-	case *string:
-		if result != 0 {
-			*dest = readString(m, uint32(result))
-		}
-	case *[]string:
-		if result != 0 {
-			*dest = readStrings(m, uint32(result))
-		}
-	case *[]int:
-		if result != 0 {
-			*dest = readInts(m, uint32(result), cap(*dest))
-		}
-	case *[]byte:
-		if result != 0 {
-			*dest = readBytes(m, uint32(result))
-		}
-	default:
-		panic(fmt.Sprintf("unknown result type %T", dest))
-	}
-	return nil
+type wasmArg interface {
+	toWasm(*module) uint64
 }
 
-func (m *module) close() {
-	if err := m.mod.Close(context.Background()); err != nil {
-		panic(err)
-	}
+type wasmResult interface {
+	fromWasm(*module, uint64)
 }
 
-func makeBytes(m *module, b []byte) uint32 {
-	ptr := m.malloc(uint32(len(b)))
-	if !m.mod.Memory().Write(ptr, b) {
-		panic("failed to write to mod.module.Memory()")
+type wasmBool bool
+
+func (b wasmBool) toWasm(*module) uint64 {
+	if b {
+		return 1
 	}
-	return ptr
+	return 0
 }
 
-func makeString(m *module, s string) uint32 {
+func (b *wasmBool) fromWasm(_ *module, val uint64) {
+	*b = val == 1
+}
+
+type wasmInt int
+
+func (i wasmInt) toWasm(*module) uint64 { return uint64(i) }
+
+func (i *wasmInt) fromWasm(_ *module, val uint64) {
+	*i = wasmInt(val)
+}
+
+type wasmUint8 uint8
+
+func (u wasmUint8) toWasm(*module) uint64 { return uint64(u) }
+
+type wasmUint32 uint32
+
+func (u wasmUint32) toWasm(*module) uint64 { return uint64(u) }
+
+func (u *wasmUint32) fromWasm(_ *module, val uint64) {
+	*u = wasmUint32(val)
+}
+
+type wasmString string
+
+func (s wasmString) toWasm(m *module) uint64 {
 	b := append([]byte(s), 0)
 	ptr := m.malloc(uint32(len(b)))
 	if !m.mod.Memory().Write(ptr, b) {
 		panic("failed to write to mod.module.Memory()")
 	}
-	return ptr
+	return uint64(ptr)
 }
 
-func makeStrings(m *module, s []string) uint32 {
+func (s *wasmString) fromWasm(m *module, val uint64) {
+	if val != 0 {
+		*s = wasmString(readString(m, uint32(val)))
+	}
+}
+
+type wasmBytes []byte
+
+func (b wasmBytes) toWasm(m *module) uint64 {
+	ptr := m.malloc(uint32(len(b)))
+	if !m.mod.Memory().Write(ptr, b) {
+		panic("failed to write to mod.module.Memory()")
+	}
+	return uint64(ptr)
+}
+
+func (b *wasmBytes) fromWasm(m *module, val uint64) {
+	if val != 0 {
+		*b = readBytes(m, uint32(val))
+	}
+}
+
+type wasmStrings []string
+
+func (s wasmStrings) toWasm(m *module) uint64 {
 	arrayPtr := m.malloc(uint32((len(s) + 1) * 4))
-	for i, s := range s {
-		b := append([]byte(s), 0)
+	for i, str := range s {
+		b := append([]byte(str), 0)
 		ptr := m.malloc(uint32(len(b)))
 		if !m.mod.Memory().Write(ptr, b) {
 			panic("failed to write to mod.module.Memory()")
@@ -513,7 +497,45 @@ func makeStrings(m *module, s []string) uint32 {
 	if !m.mod.Memory().WriteUint32Le(arrayPtr+uint32(len(s)*4), 0) {
 		panic("failed to write pointer to memory")
 	}
-	return arrayPtr
+	return uint64(arrayPtr)
+}
+
+func (s *wasmStrings) fromWasm(m *module, val uint64) {
+	if val != 0 {
+		*s = readStrings(m, uint32(val))
+	}
+}
+
+type wasmInts []int
+
+func (i *wasmInts) fromWasm(m *module, val uint64) {
+	if val != 0 {
+		*i = readInts(m, uint32(val), cap(*i))
+	}
+}
+
+func (m *module) call(name string, dest wasmResult, args ...wasmArg) error {
+	params := make([]uint64, 0, len(args))
+	for _, a := range args {
+		params = append(params, a.toWasm(m))
+	}
+
+	results, err := m.mod.ExportedFunction(name).Call(context.Background(), params...)
+	if err != nil {
+		return fmt.Errorf("call %q: %w", name, err)
+	}
+	if len(results) == 0 {
+		return nil
+	}
+
+	dest.fromWasm(m, results[0])
+	return nil
+}
+
+func (m *module) close() {
+	if err := m.mod.Close(context.Background()); err != nil {
+		panic(err)
+	}
 }
 
 func readString(m *module, ptr uint32) string {
@@ -549,7 +571,6 @@ func readBytes(m *module, ptr uint32) []byte {
 		return ret
 	}
 
-	// read the ptr to the struct to get the location of the image data
 	loc, _ := m.mod.Memory().ReadUint32Le(ptr + 4)
 	b, ok := m.mod.Memory().Read(loc, size)
 	if !ok {
