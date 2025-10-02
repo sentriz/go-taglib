@@ -42,12 +42,12 @@ func main() {
 func main() {
     err := taglib.WriteTags("path/to/audiofile.mp3", map[string][]string{
         // Multi-valued tags allowed
-        taglib.AlbumArtist:   {"David Bynre", "Brian Eno"},
+        taglib.AlbumArtist:   {"David Byrne", "Brian Eno"},
         taglib.Album:         {"My Life in the Bush of Ghosts"},
         taglib.TrackNumber:   {"1"},
 
         // Non-standard allowed too
-        "ALBUMARTIST_CREDIT": {"Brian Eno & David Bynre"},
+        "ALBUMARTIST_CREDIT": {"Brian Eno & David Byrne"},
     }, 0)
     // check(err)
 }
