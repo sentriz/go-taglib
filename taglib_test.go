@@ -302,21 +302,31 @@ func TestWriteImage(t *testing.T) {
 func TestClearImage(t *testing.T) {
 	path := tmpf(t, egFLAC, "eg.flac")
 
+	properties, err := taglib.ReadProperties(path)
+	nilErr(t, err)
+	eq(t, len(properties.Images) == 2, true) // have two imaages
+	eq(t, properties.Images[0].Description, "The first image")
+
 	img, err := taglib.ReadImage(path)
 	nilErr(t, err)
-
-	if img == nil {
-		t.Fatalf("expected image, found none")
-	}
+	eq(t, len(img) > 0, true)
 
 	nilErr(t, taglib.WriteImage(path, nil))
 
+	properties, err = taglib.ReadProperties(path)
+	nilErr(t, err)
+	eq(t, len(properties.Images) == 1, true) // have one images
+	eq(t, properties.Images[0].Description, "The second image")
+
+	nilErr(t, taglib.WriteImage(path, nil))
+
+	properties, err = taglib.ReadProperties(path)
+	nilErr(t, err)
+	eq(t, len(properties.Images) == 0, true) // have zero images
+
 	img, err = taglib.ReadImage(path)
 	nilErr(t, err)
-
-	if img != nil {
-		t.Fatalf("expected no image, found one")
-	}
+	eq(t, len(img) == 0, true)
 }
 
 func TestMemNew(t *testing.T) {

@@ -179,14 +179,19 @@ taglib_file_write_image(const char *filename, const char *buf, uint32_t length,
   if (file.isNull())
     return false;
 
-  if (length == 0) {
-    if (!file.setComplexProperties("PICTURE", {}))
-      return false;
+  auto pictures = file.complexProperties("PICTURE");
 
+  if (length == 0) {
+    // remove image at index if it exists
+    if (index >= 0 && index < static_cast<int>(pictures.size())) {
+      auto it = pictures.begin();
+      std::advance(it, index);
+      pictures.erase(it);
+      if (!file.setComplexProperties("PICTURE", pictures))
+        return false;
+    }
     return file.save();
   }
-
-  auto pictures = file.complexProperties("PICTURE");
 
   TagLib::VariantMap newPicture;
   newPicture["data"] = TagLib::ByteVector(buf, length);

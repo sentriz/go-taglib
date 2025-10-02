@@ -278,6 +278,7 @@ func ReadImage(path string) ([]byte, error) {
 }
 
 // WriteImage writes image as an embedded "Front Cover" at index 0 with auto-detected MIME type.
+// Set image to nil to clear the image at that index.
 func WriteImage(path string, image []byte) error {
 	mimeType := ""
 	if image != nil {
@@ -311,6 +312,7 @@ func ReadImageOptions(path string, index int) ([]byte, error) {
 
 // WriteImageOptions writes an image with custom metadata.
 // Index specifies which image slot to write to (0 = first image).
+// Set image to nil to clear the image at that index.
 func WriteImageOptions(path string, image []byte, index int, imageType, description, mimeType string) error {
 	var err error
 	path, err = filepath.Abs(path)
