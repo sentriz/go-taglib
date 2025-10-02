@@ -329,6 +329,36 @@ func TestClearImage(t *testing.T) {
 	eq(t, len(img) == 0, true)
 }
 
+func TestClearImageReverse(t *testing.T) {
+	path := tmpf(t, egFLAC, "eg.flac")
+
+	properties, err := taglib.ReadProperties(path)
+	nilErr(t, err)
+	eq(t, len(properties.Images) == 2, true) // have two imaages
+	eq(t, properties.Images[0].Description, "The first image")
+
+	img, err := taglib.ReadImage(path)
+	nilErr(t, err)
+	eq(t, len(img) > 0, true)
+
+	nilErr(t, taglib.WriteImageOptions(path, nil, 1, "", "", "")) // delete the second
+
+	properties, err = taglib.ReadProperties(path)
+	nilErr(t, err)
+	eq(t, len(properties.Images) == 1, true)                   // have one images
+	eq(t, properties.Images[0].Description, "The first image") // but it's the first one
+
+	nilErr(t, taglib.WriteImage(path, nil))
+
+	properties, err = taglib.ReadProperties(path)
+	nilErr(t, err)
+	eq(t, len(properties.Images) == 0, true) // have zero images
+
+	img, err = taglib.ReadImage(path)
+	nilErr(t, err)
+	eq(t, len(img) == 0, true)
+}
+
 func TestMemNew(t *testing.T) {
 	t.Parallel()
 
