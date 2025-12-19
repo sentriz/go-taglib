@@ -1,5 +1,7 @@
 module go.senan.xyz/taglib
 
-go 1.23.0
+go 1.24.0
 
-require github.com/tetratelabs/wazero v1.10.1
+require github.com/tetratelabs/wazero v1.11.0
+
+require golang.org/x/sys v0.39.0 // indirect
