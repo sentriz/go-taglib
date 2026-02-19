@@ -2,7 +2,7 @@
 
 This project is a Go library for reading and writing audio metadata tags. By packaging an embedded **Wasm** binary, the library needs no external dependencies or CGo. Meaning easy static builds and cross compilation.
 
-Current bundled TagLib version is [v2.1.1](https://github.com/taglib/taglib/releases/tag/v2.1.1).
+Current bundled TagLib version is [v2.2](https://github.com/taglib/taglib/releases/tag/v2.2).
 
 To reproduce or verify the bundled binary, see the [attestations](https://github.com/sentriz/go-taglib/attestations/).
 

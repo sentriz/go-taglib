@@ -28,6 +28,8 @@ include_directories(
   taglib/taglib/asf
   taglib/taglib/wavpack
   taglib/taglib/dsf
+  taglib/taglib/matroska
+  taglib/taglib/matroska/ebml
 )
 
 add_executable(taglib taglib.cpp)
