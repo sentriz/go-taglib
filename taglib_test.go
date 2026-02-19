@@ -1162,6 +1162,8 @@ var (
 	coverJPG []byte
 	//go:embed testdata/eg_lyrics.mp3
 	egMP3Lyrics []byte
+	//go:embed testdata/eg.mka
+	egMKA []byte
 )
 
 func testPaths(t testing.TB) []string {
@@ -1172,6 +1174,7 @@ func testPaths(t testing.TB) []string {
 		tmpf(t, egWAV, "eg.wav"),
 		tmpf(t, egOgg, "eg.ogg"),
 		tmpf(t, egAIFF, "eg.aiff"),
+		tmpf(t, egMKA, "eg.mka"),
 	}
 }
 
@@ -1511,6 +1514,45 @@ func TestFileEfficiency(t *testing.T) {
 	eq(t, format, taglib.FormatMPEG)
 }
 
+func TestMatroskaFormat(t *testing.T) {
+	t.Parallel()
+
+	path := tmpf(t, egMKA, "eg.mka")
+
+	// Test format detection via File handle
+	f, err := taglib.OpenReadOnly(path)
+	nilErr(t, err)
+	defer f.Close()
+
+	eq(t, taglib.FormatMatroska, f.Format())
+	eq(t, "Matroska", f.Format().String())
+
+	// Test properties
+	props := f.Properties()
+	eq(t, 1, props.Channels)
+	if props.SampleRate == 0 {
+		t.Fatal("expected sample rate > 0")
+	}
+}
+
+func TestMatroskaReadWrite(t *testing.T) {
+	t.Parallel()
+
+	path := tmpf(t, egMKA, "eg.mka")
+
+	err := taglib.WriteTags(path, map[string][]string{
+		"TITLE":  {"MKA Title"},
+		"ARTIST": {"MKA Artist"},
+	}, taglib.Clear)
+	nilErr(t, err)
+
+	tags, err := taglib.ReadTags(path)
+	nilErr(t, err)
+
+	eq(t, tags[taglib.Title][0], "MKA Title")
+	eq(t, tags[taglib.Artist][0], "MKA Artist")
+}
+
 func TestFileFormatString(t *testing.T) {
 	t.Parallel()
 
@@ -1524,6 +1566,7 @@ func TestFileFormatString(t *testing.T) {
 		{taglib.FormatOggVorbis, "Ogg Vorbis"},
 		{taglib.FormatWAV, "WAV"},
 		{taglib.FormatAIFF, "AIFF"},
+		{taglib.FormatMatroska, "Matroska"},
 		{taglib.FormatUnknown, "Unknown"},
 	}
 

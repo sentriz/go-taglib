@@ -46,6 +46,7 @@
 #include "mpc/mpcfile.h"
 #include "mpc/mpcproperties.h"
 #include "shorten/shortenfile.h"
+#include "matroska/matroskafile.h"
 
 // File format enum - must match Go's FileFormat
 enum FileFormat : uint8_t {
@@ -67,6 +68,7 @@ enum FileFormat : uint8_t {
   FORMAT_TRUE_AUDIO = 15,
   FORMAT_MPC = 16,
   FORMAT_SHORTEN = 17,
+  FORMAT_MATROSKA = 18,
 };
 
 // ============================================================================
@@ -242,6 +244,7 @@ static FileFormat detect_format(TagLib::File *file) {
   if (dynamic_cast<TagLib::TrueAudio::File *>(file)) return FORMAT_TRUE_AUDIO;
   if (dynamic_cast<TagLib::MPC::File *>(file)) return FORMAT_MPC;
   if (dynamic_cast<TagLib::Shorten::File *>(file)) return FORMAT_SHORTEN;
+  if (dynamic_cast<TagLib::Matroska::File *>(file)) return FORMAT_MATROSKA;
   return FORMAT_UNKNOWN;
 }
 

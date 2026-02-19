@@ -47,6 +47,7 @@ const (
 	FormatTrueAudio FileFormat = 15
 	FormatMPC       FileFormat = 16
 	FormatShorten   FileFormat = 17
+	FormatMatroska  FileFormat = 18
 )
 
 func (f FileFormat) String() string {
@@ -85,6 +86,8 @@ func (f FileFormat) String() string {
 		return "MPC"
 	case FormatShorten:
 		return "Shorten"
+	case FormatMatroska:
+		return "Matroska"
 	default:
 		return "Unknown"
 	}
