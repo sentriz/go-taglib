@@ -390,6 +390,7 @@ func TestPropertiesBitsPerSample(t *testing.T) {
 		{"M4A", egM4a, "eg.m4a", 16}, // AAC in M4A container
 		{"MP3", egMP3, "eg.mp3", 0},  // MP3 doesn't support BitsPerSample
 		{"OGG", egOgg, "eg.ogg", 0},  // Vorbis doesn't support BitsPerSample
+		{"MKA", egMKA, "eg.mka", 32}, // Vorbis uses 32-bit float samples
 	}
 
 	for _, tt := range tests {
@@ -418,6 +419,7 @@ func TestPropertiesCodec(t *testing.T) {
 		{"OGG", egOgg, "eg.ogg", ""},    // Vorbis doesn't have codec variants
 		{"WAV", egWAV, "eg.wav", ""},    // WAV doesn't have codec variants
 		{"AIFF", egAIFF, "eg.aiff", ""}, // AIFF doesn't have codec variants
+		{"MKA", egMKA, "eg.mka", "A_VORBIS"},
 	}
 
 	for _, tt := range tests {

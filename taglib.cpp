@@ -467,6 +467,8 @@ static int extract_bits_per_sample(const TagLib::AudioProperties *audioPropertie
     return wavProperties->bitsPerSample();
   if (const auto* dsfProperties = dynamic_cast<const TagLib::DSF::Properties*>(audioProperties))
     return dsfProperties->bitsPerSample();
+  if (const auto* mkProperties = dynamic_cast<const TagLib::Matroska::Properties*>(audioProperties))
+    return mkProperties->bitsPerSample();
   return 0;
 }
 
@@ -506,6 +508,9 @@ static char* extract_codec(const TagLib::AudioProperties *audioProperties) {
       codec = "MPC8";
     else if (version >= 7)
       codec = "MPC7";
+  }
+  else if (const auto* mkProps = dynamic_cast<const TagLib::Matroska::Properties*>(audioProperties)) {
+    codec = mkProps->codecName();
   }
   return codec.isEmpty() ? nullptr : to_char_array(codec);
 }
