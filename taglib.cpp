@@ -47,6 +47,8 @@
 #include "mpc/mpcproperties.h"
 #include "shorten/shortenfile.h"
 #include "matroska/matroskafile.h"
+#include "matroska/matroskatag.h"
+#include "matroska/matroskasimpletag.h"
 
 // File format enum - must match Go's FileFormat
 enum FileFormat : uint8_t {
@@ -352,6 +354,60 @@ static FileFormat get_format(uint32_t handle) {
   return it->second.format;
 }
 
+// For Matroska files, TagLib's properties() may miss tags written by ffmpeg.
+// ffmpeg uses tag names like "ALBUM", "ARTIST" directly as SimpleTag names,
+// while the Matroska spec (and TagLib) expects e.g. "TITLE" at Album level
+// for the album name. TagLib drops unrecognized names at non-Track levels.
+// This helper adds missing properties from the raw SimpleTags and the
+// segment title fallback.
+static TagLib::PropertyMap enrich_matroska_properties(TagLib::FileRef &fileRef) {
+  auto properties = fileRef.properties();
+  auto *mkFile = dynamic_cast<TagLib::Matroska::File *>(fileRef.file());
+  if (!mkFile)
+    return properties;
+
+  auto *mkTag = dynamic_cast<TagLib::Matroska::Tag *>(mkFile->tag());
+  if (!mkTag)
+    return properties;
+
+  // Matroska SimpleTag names used at Album level by TagLib's translation table.
+  // These are the spec-compliant names that TagLib already translates to
+  // property keys (e.g. "TITLE" at Album -> "ALBUM"). We skip these to
+  // avoid duplicating what properties() already returns.
+  static const TagLib::StringList knownAlbumTags = {
+    "TITLE", "ARTIST", "PART_NUMBER", "TOTAL_PARTS", "TITLESORT",
+    "ARTISTSORT", "REPLAYGAIN_GAIN", "REPLAYGAIN_PEAK",
+    "DATE_RELEASED", "LABEL_CODE", "CATALOG_NUMBER",
+    "MUSICBRAINZ_ALBUMARTISTID", "MUSICBRAINZ_ALBUMID",
+    "MUSICBRAINZ_RELEASEGROUPID",
+  };
+
+  // Scan SimpleTags at Album level for ffmpeg-style names that TagLib dropped.
+  // ffmpeg writes e.g. "ALBUM" as a SimpleTag name at Album level (50),
+  // but TagLib expects "TITLE" at Album level and drops "ALBUM".
+  for (const auto &st : mkTag->simpleTagsList()) {
+    if (st.type() != TagLib::Matroska::SimpleTag::StringType || st.trackUid() != 0)
+      continue;
+    if (st.targetTypeValue() != TagLib::Matroska::SimpleTag::Album)
+      continue;
+    TagLib::String name = st.name();
+    if (name.isEmpty() || properties.contains(name))
+      continue;
+    if (knownAlbumTags.contains(name))
+      continue;
+    properties[name].append(st.toString());
+  }
+
+  // Add segment title as TITLE if still missing
+  if (!properties.isEmpty() && !properties.contains("TITLE")) {
+    auto *tag = fileRef.tag();
+    if (tag && !tag->title().isEmpty())
+      properties["TITLE"].append(tag->title());
+  }
+
+  return properties;
+}
+
 // Helper to serialize properties to string array
 static char **serialize_properties(const TagLib::PropertyMap &properties) {
   size_t len = 0;
@@ -379,7 +435,7 @@ taglib_handle_tags(uint32_t handle) {
   TagLib::FileRef *fileRef = get_file_ref(handle);
   if (!fileRef)
     return nullptr;
-  return serialize_properties(fileRef->properties());
+  return serialize_properties(enrich_matroska_properties(*fileRef));
 }
 
 // Forward declarations for raw tag helpers
@@ -431,7 +487,7 @@ taglib_handle_raw_tags(uint32_t handle) {
     default:
       // For formats without format-specific tags (FLAC, OGG, etc.),
       // return the same as normalized tags (they use Vorbis Comments)
-      return serialize_properties(fileRef->properties());
+      return serialize_properties(enrich_matroska_properties(*fileRef));
   }
 
   // Return empty array
@@ -977,7 +1033,7 @@ taglib_file_tags(const char *filename) {
   TagLib::FileRef file(filename);
   if (file.isNull())
     return nullptr;
-  return serialize_properties(file.properties());
+  return serialize_properties(enrich_matroska_properties(file));
 }
 
 __attribute__((export_name("taglib_file_write_tags"))) bool
