@@ -5,6 +5,9 @@
 
 #include "fileref.h"
 #include "tpropertymap.h"
+#include "mp4file.h"
+#include "mp4tag.h"
+#include "mp4item.h"
 
 char *to_char_array(const TagLib::String &s) {
   const std::string str = s.to8Bit(true);
@@ -26,6 +29,25 @@ taglib_file_tags(const char *filename) {
     return nullptr;
 
   auto properties = file.properties();
+
+  // For MP4 files: also read freeform atoms (----:com.apple.iTunes:*)
+  if (auto *mp4File = dynamic_cast<TagLib::MP4::File *>(file.file())) {
+    if (auto *mp4Tag = mp4File->tag()) {
+      for (const auto &item : mp4Tag->itemMap()) {
+        TagLib::String key = item.first;
+        if (key.startsWith("----:com.apple.iTunes:")) {
+          // Extract short key from "----:com.apple.iTunes:KEYNAME"
+          TagLib::String shortKey = key.substr(22); // len("----:com.apple.iTunes:") = 22
+          if (!properties.contains(shortKey) && !shortKey.isEmpty()) {
+            auto strList = item.second.toStringList();
+            if (!strList.isEmpty()) {
+              properties.insert(shortKey, strList);
+            }
+          }
+        }
+      }
+    }
+  }
 
   size_t len = 0;
   for (const auto &kvs : properties)
@@ -74,7 +96,24 @@ taglib_file_write_tags(const char *filename, const char **tags, uint8_t opts) {
     }
   }
 
-  file.setProperties(properties);
+  auto unsupported = file.setProperties(properties);
+
+  // For MP4 files: write unsupported properties as freeform iTunes atoms
+  // (----:com.apple.iTunes:KEYNAME). This allows custom tags like NARRATOR,
+  // SERIES, PUBLISHER, etc. to persist in M4B/M4A files.
+  if (!unsupported.isEmpty()) {
+    if (auto *mp4File = dynamic_cast<TagLib::MP4::File *>(file.file())) {
+      if (auto *mp4Tag = mp4File->tag()) {
+        for (const auto &kvs : unsupported) {
+          if (kvs.second.isEmpty())
+            continue;
+          TagLib::String atomKey = "----:com.apple.iTunes:" + kvs.first;
+          mp4Tag->setItem(atomKey, TagLib::MP4::Item(kvs.second));
+        }
+      }
+    }
+  }
+
   return file.save();
 }
 

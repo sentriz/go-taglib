@@ -13,6 +13,7 @@ add_subdirectory(
 include_directories(
   taglib/taglib
   taglib/taglib/toolkit
+  taglib/taglib/mp4
 )
 
 add_executable(taglib taglib.cpp)
