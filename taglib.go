@@ -172,7 +172,7 @@ func ReadTags(path string) (map[string][]string, error) {
 type Properties struct {
 	// Format is TagLib's lowercased format name, e.g. flac, mpeg, mp4, ogg, wav
 	Format string
-	// InnerCodec is the codec inside a container format, e.g. mp4->aac/alac, ogg->vorbis, wav->pcm or "" for non-container formats
+	// InnerCodec is the codec inside a container format, e.g. mp4->aac/alac, ogg->vorbis, wav->pcm, or "" for non-container formats
 	InnerCodec string
 	// Length is the duration of the audio
 	Length time.Duration
