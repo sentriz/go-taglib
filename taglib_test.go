@@ -228,9 +228,12 @@ func TestProperties(t *testing.T) {
 	nilErr(t, err)
 
 	eq(t, 1*time.Second, properties.Length)
-	eq(t, 1460, properties.Bitrate)
+	eq(t, 1460, properties.BitRate)
 	eq(t, 48_000, properties.SampleRate)
 	eq(t, 2, properties.Channels)
+	eq(t, "flac", properties.Format)
+	eq(t, "", properties.InnerCodec)
+	eq(t, 24, properties.BitDepth)
 
 	eq(t, len(properties.Images), 2)
 	eq(t, properties.Images[0].Type, "Front Cover")

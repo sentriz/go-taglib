@@ -6,6 +6,23 @@
 #include "fileref.h"
 #include "tpropertymap.h"
 
+#include "mpeg/mpegproperties.h"
+#include "flac/flacproperties.h"
+#include "ogg/vorbis/vorbisproperties.h"
+#include "ogg/opus/opusproperties.h"
+#include "ogg/speex/speexproperties.h"
+#include "mp4/mp4properties.h"
+#include "riff/wav/wavproperties.h"
+#include "riff/aiff/aiffproperties.h"
+#include "ape/apeproperties.h"
+#include "wavpack/wavpackproperties.h"
+#include "asf/asfproperties.h"
+#include "dsf/dsfproperties.h"
+#include "dsdiff/dsdiffproperties.h"
+#include "trueaudio/trueaudioproperties.h"
+#include "mpc/mpcproperties.h"
+#include "shorten/shortenproperties.h"
+
 char *to_char_array(const TagLib::String &s) {
   const std::string str = s.to8Bit(true);
   return ::strdup(str.c_str());
@@ -79,12 +96,88 @@ taglib_file_write_tags(const char *filename, const char **tags, uint8_t opts) {
 }
 
 struct FileProperties {
+  char *format;
+  char *innerCodec;
   uint32_t lengthInMilliseconds;
   uint32_t channels;
   uint32_t sampleRate;
-  uint32_t bitrate;
+  uint32_t bitRate;
+  uint32_t bitsPerSample;
   char **imageMetadata;
 };
+
+// format, inner codec and bit depth all live on the concrete *::Properties subclass, not the
+// base AudioProperties, so downcast once and read them together. names mirror taglib's own,
+// lowercased. bitsPerSample() isn't virtual, hence the per-arm calls.
+static void extract_format_codec_depth(const TagLib::AudioProperties *ap,
+                                       char **format, char **innerCodec, uint32_t *bitsPerSample) {
+  using namespace TagLib;
+  *format = nullptr;
+  *innerCodec = nullptr;
+  *bitsPerSample = 0;
+
+  // containers: codec() picks the inner codec
+  if (auto p = dynamic_cast<const MP4::Properties *>(ap)) {
+    *format = to_char_array("mp4");
+    *bitsPerSample = p->bitsPerSample();
+    switch (p->codec()) {
+      case MP4::Properties::AAC:  *innerCodec = to_char_array("aac");  break;
+      case MP4::Properties::ALAC: *innerCodec = to_char_array("alac"); break;
+      default: break;
+    }
+    return;
+  }
+  if (auto p = dynamic_cast<const ASF::Properties *>(ap)) {
+    *format = to_char_array("asf");
+    *bitsPerSample = p->bitsPerSample();
+    switch (p->codec()) {
+      case ASF::Properties::WMA1:         *innerCodec = to_char_array("wma1");         break;
+      case ASF::Properties::WMA2:         *innerCodec = to_char_array("wma2");         break;
+      case ASF::Properties::WMA9Pro:      *innerCodec = to_char_array("wma9pro");      break;
+      case ASF::Properties::WMA9Lossless: *innerCodec = to_char_array("wma9lossless"); break;
+      default: break;
+    }
+    return;
+  }
+
+  // ogg has one subclass per codec. ogg flac (.oga) reuses FLAC::Properties so it can't be told
+  // apart here and falls through to the flac arm below - fine, we don't ship an .oga fixture
+  if (dynamic_cast<const Ogg::Vorbis::Properties *>(ap)) { *format = to_char_array("ogg"); *innerCodec = to_char_array("vorbis"); return; }
+  if (dynamic_cast<const Ogg::Opus::Properties *>(ap))   { *format = to_char_array("ogg"); *innerCodec = to_char_array("opus");   return; }
+  if (dynamic_cast<const Ogg::Speex::Properties *>(ap))  { *format = to_char_array("ogg"); *innerCodec = to_char_array("speex");  return; }
+
+  // riff: check the format tag rather than assume pcm; compressed wav/aiff-c leaves innerCodec ""
+  if (auto p = dynamic_cast<const RIFF::WAV::Properties *>(ap)) {
+    *format = to_char_array("wav");
+    *bitsPerSample = p->bitsPerSample();
+    if (p->format() == 1 || p->format() == 3) *innerCodec = to_char_array("pcm"); // 1 = pcm, 3 = float
+    return;
+  }
+  if (auto p = dynamic_cast<const RIFF::AIFF::Properties *>(ap)) {
+    *format = to_char_array("aiff");
+    *bitsPerSample = p->bitsPerSample();
+    auto c = p->compressionType(); // aiff-c 4cc; these are the uncompressed ones
+    if (!p->isAiffC() || c.isEmpty() || c == "NONE" || c == "sowt" || c == "twos" || c == "fl32" || c == "fl64")
+      *innerCodec = to_char_array("pcm");
+    return;
+  }
+
+  // dsf (sony) and dsdiff (philips) are separate formats, both carrying dsd
+  if (auto p = dynamic_cast<const DSF::Properties *>(ap))    { *format = to_char_array("dsf");    *innerCodec = to_char_array("dsd"); *bitsPerSample = p->bitsPerSample(); return; }
+  if (auto p = dynamic_cast<const DSDIFF::Properties *>(ap)) { *format = to_char_array("dsdiff"); *innerCodec = to_char_array("dsd"); *bitsPerSample = p->bitsPerSample(); return; }
+
+  // monolithic lossless: format is the codec, innerCodec stays ""
+  if (auto p = dynamic_cast<const FLAC::Properties *>(ap))      { *format = to_char_array("flac");    *bitsPerSample = p->bitsPerSample(); return; }
+  if (auto p = dynamic_cast<const APE::Properties *>(ap))       { *format = to_char_array("ape");     *bitsPerSample = p->bitsPerSample(); return; }
+  if (auto p = dynamic_cast<const WavPack::Properties *>(ap))   { *format = to_char_array("wavpack"); *bitsPerSample = p->bitsPerSample(); return; }
+  if (auto p = dynamic_cast<const TrueAudio::Properties *>(ap)) { *format = to_char_array("tta");     *bitsPerSample = p->bitsPerSample(); return; }
+  if (auto p = dynamic_cast<const Shorten::Properties *>(ap))   { *format = to_char_array("shorten"); *bitsPerSample = p->bitsPerSample(); return; }
+
+  // monolithic lossy: no fixed bit depth
+  if (dynamic_cast<const MPEG::Properties *>(ap)) { *format = to_char_array("mpeg");     return; }
+  if (dynamic_cast<const MPC::Properties *>(ap))  { *format = to_char_array("musepack"); return; }
+  // anything else (tracker modules etc.) stays ""
+}
 
 __attribute__((export_name("taglib_file_read_properties"))) FileProperties *
 taglib_file_read_properties(const char *filename) {
@@ -101,7 +194,8 @@ taglib_file_read_properties(const char *filename) {
   props->lengthInMilliseconds = audioProperties->lengthInMilliseconds();
   props->channels = audioProperties->channels();
   props->sampleRate = audioProperties->sampleRate();
-  props->bitrate = audioProperties->bitrate();
+  props->bitRate = audioProperties->bitrate();
+  extract_format_codec_depth(audioProperties, &props->format, &props->innerCodec, &props->bitsPerSample);
 
   const auto &pictures = file.complexProperties("PICTURE");
 

@@ -170,14 +170,20 @@ func ReadTags(path string) (map[string][]string, error) {
 
 // Properties contains the audio properties of a media file.
 type Properties struct {
+	// Format is TagLib's lowercased format name, e.g. flac, mpeg, mp4, ogg, wav
+	Format string
+	// InnerCodec is the codec inside a container format, e.g. mp4->aac/alac, ogg->vorbis, wav->pcm or "" for non-container formats
+	InnerCodec string
 	// Length is the duration of the audio
 	Length time.Duration
 	// Channels is the number of audio channels
 	Channels uint
 	// SampleRate in Hz
 	SampleRate uint
-	// Bitrate in kbit/s
-	Bitrate uint
+	// BitRate in kbit/s
+	BitRate uint
+	// BitDepth is bits per sample, 0 if unknown or lossy
+	BitDepth uint
 	// Images contains metadata about all embedded images
 	Images []ImageDesc
 }
@@ -226,10 +232,13 @@ func ReadProperties(path string) (Properties, error) {
 	}
 
 	return Properties{
+		Format:     raw.format,
+		InnerCodec: raw.innerCodec,
 		Length:     time.Duration(raw.lengthInMilliseconds) * time.Millisecond,
 		Channels:   uint(raw.channels),
 		SampleRate: uint(raw.sampleRate),
-		Bitrate:    uint(raw.bitrate),
+		BitRate:    uint(raw.bitRate),
+		BitDepth:   uint(raw.bitsPerSample),
 		Images:     images,
 	}, nil
 }
@@ -528,10 +537,13 @@ func (s *wasmStrings) decode(m *module, val uint64) {
 }
 
 type wasmFileProperties struct {
+	format               string
+	innerCodec           string
 	lengthInMilliseconds uint32
 	channels             uint32
 	sampleRate           uint32
-	bitrate              uint32
+	bitRate              uint32
+	bitsPerSample        uint32
 	imageDescs           []string
 }
 
@@ -541,12 +553,19 @@ func (f *wasmFileProperties) decode(m *module, val uint64) {
 	}
 	ptr := uint32(val)
 
-	f.lengthInMilliseconds, _ = m.mod.Memory().ReadUint32Le(ptr)
-	f.channels, _ = m.mod.Memory().ReadUint32Le(ptr + 4)
-	f.sampleRate, _ = m.mod.Memory().ReadUint32Le(ptr + 8)
-	f.bitrate, _ = m.mod.Memory().ReadUint32Le(ptr + 12)
+	if formatPtr, _ := m.mod.Memory().ReadUint32Le(ptr); formatPtr != 0 {
+		f.format = readString(m, formatPtr)
+	}
+	if innerCodecPtr, _ := m.mod.Memory().ReadUint32Le(ptr + 4); innerCodecPtr != 0 {
+		f.innerCodec = readString(m, innerCodecPtr)
+	}
+	f.lengthInMilliseconds, _ = m.mod.Memory().ReadUint32Le(ptr + 8)
+	f.channels, _ = m.mod.Memory().ReadUint32Le(ptr + 12)
+	f.sampleRate, _ = m.mod.Memory().ReadUint32Le(ptr + 16)
+	f.bitRate, _ = m.mod.Memory().ReadUint32Le(ptr + 20)
+	f.bitsPerSample, _ = m.mod.Memory().ReadUint32Le(ptr + 24)
 
-	imageMetadataPtr, _ := m.mod.Memory().ReadUint32Le(ptr + 16)
+	imageMetadataPtr, _ := m.mod.Memory().ReadUint32Le(ptr + 28)
 	if imageMetadataPtr != 0 {
 		f.imageDescs = readStrings(m, imageMetadataPtr)
 	}

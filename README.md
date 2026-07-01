@@ -76,9 +76,12 @@ func main() {
     // check(err)
 
     fmt.Printf("Length: %v\n", properties.Length)
-    fmt.Printf("Bitrate: %d\n", properties.Bitrate)
+    fmt.Printf("BitRate: %d\n", properties.BitRate)
+    fmt.Printf("BitDepth: %d\n", properties.BitDepth)
     fmt.Printf("SampleRate: %d\n", properties.SampleRate)
     fmt.Printf("Channels: %d\n", properties.Channels)
+    fmt.Printf("Format: %s\n", properties.Format)
+    fmt.Printf("InnerCodec: %s\n", properties.InnerCodec)
 
     // Image metadata (without reading actual image data)
     for i, img := range properties.Images {
