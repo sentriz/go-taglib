@@ -195,6 +195,106 @@ func TestReadExistingUnicode(t *testing.T) {
 	eq(t, tags[taglib.AlbumArtist][0], "Brian Eno—David Byrne")
 }
 
+func TestUnsupported(t *testing.T) {
+	t.Parallel()
+
+	// testdata/unsupported.mp3 carries PRIV, GEOB, and POPM frames, none of
+	// which PropertyMap can represent
+	path := tmpf(t, egUnsupportedMP3, "unsupported.mp3")
+
+	descriptors, err := taglib.ReadUnsupported(path)
+	nilErr(t, err)
+
+	for _, want := range []string{"PRIV", "GEOB", "POPM"} {
+		if !slices.ContainsFunc(descriptors, func(d string) bool { return strings.HasPrefix(d, want) }) {
+			t.Fatalf("descriptor %q missing in %q", want, descriptors)
+		}
+	}
+
+	// normal tags are unaffected and don't show up as unsupported
+	tags, err := taglib.ReadTags(path)
+	nilErr(t, err)
+	eq(t, len(tags["ARTIST"]) > 0, true)
+
+	// remove a subset, the rest must survive
+	var priv []string
+	for _, d := range descriptors {
+		if strings.HasPrefix(d, "PRIV") {
+			priv = append(priv, d)
+		}
+	}
+	nilErr(t, taglib.RemoveUnsupported(path, priv))
+
+	descriptors, err = taglib.ReadUnsupported(path)
+	nilErr(t, err)
+	for _, d := range descriptors {
+		if strings.HasPrefix(d, "PRIV") {
+			t.Fatalf("PRIV survived removal: %q", descriptors)
+		}
+	}
+	for _, want := range []string{"GEOB", "POPM"} {
+		if !slices.ContainsFunc(descriptors, func(d string) bool { return strings.HasPrefix(d, want) }) {
+			t.Fatalf("descriptor %q removed but should survive: %q", want, descriptors)
+		}
+	}
+
+	// remove everything else
+	nilErr(t, taglib.RemoveUnsupported(path, descriptors))
+
+	descriptors, err = taglib.ReadUnsupported(path)
+	nilErr(t, err)
+	eq(t, len(descriptors), 0)
+
+	// regular tags still intact
+	tags, err = taglib.ReadTags(path)
+	nilErr(t, err)
+	eq(t, len(tags["ARTIST"]) > 0, true)
+
+	// no descriptors is a no-op, not an error
+	nilErr(t, taglib.RemoveUnsupported(path, nil))
+}
+
+func TestUnsupportedNoneFound(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range testPaths(t) {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			descriptors, err := taglib.ReadUnsupported(path)
+			nilErr(t, err)
+			eq(t, len(descriptors), 0)
+		})
+	}
+}
+
+func TestUnsupportedAPIC(t *testing.T) {
+	t.Parallel()
+
+	// documented footgun: ID3v2 pictures are reported as "APIC" even though
+	// they're supported via ReadImage/WriteImage, and removing "APIC"
+	// deletes all embedded cover art. this test pins that behavior so a
+	// TagLib upgrade changing it doesn't go unnoticed
+	path := tmpf(t, egMP3, "eg.mp3")
+	nilErr(t, taglib.WriteImage(path, coverJPG))
+
+	descriptors, err := taglib.ReadUnsupported(path)
+	nilErr(t, err)
+	eq(t, slices.Contains(descriptors, "APIC"), true)
+
+	nilErr(t, taglib.RemoveUnsupported(path, []string{"APIC"}))
+
+	img, err := taglib.ReadImage(path)
+	nilErr(t, err)
+	eq(t, len(img), 0)
+}
+
+func TestUnsupportedInvalid(t *testing.T) {
+	t.Parallel()
+
+	path := tmpf(t, []byte("not a file"), "eg.flac")
+	_, err := taglib.ReadUnsupported(path)
+	eq(t, err, taglib.ErrInvalidFile)
+}
+
 func TestConcurrent(t *testing.T) {
 	t.Parallel()
 
@@ -424,6 +524,8 @@ var (
 	egFLAC []byte
 	//go:embed testdata/eg.mp3
 	egMP3 []byte
+	//go:embed testdata/unsupported.mp3
+	egUnsupportedMP3 []byte
 	//go:embed testdata/eg.m4a
 	egM4a []byte
 	//go:embed testdata/eg.ogg

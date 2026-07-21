@@ -1,0 +1,7 @@
+# IDE shenanigans
+*.iml
+.idea/
+
+# AI stuff
+docs/superpowers
+.superpowers
