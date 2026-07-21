@@ -64,6 +64,56 @@ taglib_file_tags(const char *filename) {
   return tags;
 }
 
+// unsupported data: metadata that TagLib's PropertyMap cannot represent as
+// text key/values (ID3v2 PRIV/GEOB/POPM, unknown or binary frames, ...).
+// descriptors follow taglib's convention: usually a bare frame ID ("PRIV",
+// "GEOB", "POPM"), with a suffix only for UNKNOWN/XXXX, UFID/owner,
+// CHAP/elementID, CTOC/elementID. bare IDs remove ALL frames of that type.
+// beware: ID3v2 pictures show up here as "APIC" even though they're
+// supported via the complex-properties API; removing "APIC" deletes all
+// embedded cover art.
+
+__attribute__((export_name("taglib_file_unsupported"))) char **
+taglib_file_unsupported(const char *filename) {
+  TagLib::FileRef file(filename);
+  if (file.isNull())
+    return nullptr;
+
+  const auto unsupported = file.properties().unsupportedData();
+
+  size_t len = unsupported.size();
+  char **out = static_cast<char **>(malloc(sizeof(char *) * (len + 1)));
+  if (!out)
+    return nullptr;
+
+  size_t i = 0;
+  for (const auto &d : unsupported) {
+    out[i] = to_char_array(d);
+    i++;
+  }
+  out[len] = nullptr;
+
+  return out;
+}
+
+__attribute__((export_name("taglib_file_remove_unsupported"))) bool
+taglib_file_remove_unsupported(const char *filename,
+                               const char **descriptors) {
+  if (!filename || !descriptors)
+    return false;
+
+  TagLib::FileRef file(filename);
+  if (file.isNull())
+    return false;
+
+  TagLib::StringList list;
+  for (size_t i = 0; descriptors[i]; i++)
+    list.append(to_string(descriptors[i]));
+
+  file.removeUnsupportedProperties(list);
+  return file.save();
+}
+
 static const uint8_t CLEAR = 1 << 0;
 
 __attribute__((export_name("taglib_file_write_tags"))) bool

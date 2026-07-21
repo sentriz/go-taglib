@@ -168,6 +168,90 @@ func ReadTags(path string) (map[string][]string, error) {
 	return tags, nil
 }
 
+// ReadUnsupported returns descriptors for metadata in the file that the
+// PropertyMap abstraction used by [ReadTags] cannot represent as text
+// key/values — for example ID3v2 PRIV, GEOB, POPM, or unknown binary frames.
+//
+// The descriptor format follows TagLib's convention. Most frames are reported
+// as a bare frame ID, e.g. "PRIV", "GEOB", "POPM". Only a few carry an
+// identifying suffix: "UNKNOWN/XXXX" for unknown frames, "UFID/owner",
+// "CHAP/elementID", "CTOC/elementID". A file with several frames of the same
+// type (e.g. two PRIV frames with different owners) yields the same bare
+// descriptor repeated, and those frames cannot be told apart or removed
+// individually. Descriptors can be passed, in full or as a subset, to
+// [RemoveUnsupported].
+//
+// WARNING: for ID3v2 files, embedded pictures are reported here as "APIC"
+// even though this library does support them via [ReadImage] and
+// [Properties.Images]. Other formats (e.g. FLAC) do not report their
+// pictures. Filter out "APIC" before offering a "remove all unsupported"
+// action to users, or embedded cover art will be deleted — see
+// [RemoveUnsupported].
+func ReadUnsupported(path string) ([]string, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("make path abs %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	mod, err := newModuleRO(dir)
+	if err != nil {
+		return nil, fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var raw wasmStrings
+	if err := mod.call("taglib_file_unsupported", &raw, wasmString(wasmPath(path))); err != nil {
+		return nil, fmt.Errorf("call: %w", err)
+	}
+	if raw == nil {
+		return nil, ErrInvalidFile
+	}
+	return raw, nil
+}
+
+// RemoveUnsupported removes the metadata identified by the given descriptors
+// from the file at path. Descriptors should come from [ReadUnsupported];
+// passing a subset removes only that subset. Descriptors not present in the
+// file are ignored.
+//
+// A bare frame ID descriptor such as "PRIV" removes ALL frames of that type,
+// not a single frame — see [ReadUnsupported] for which descriptors carry an
+// identifying suffix.
+//
+// WARNING: passing "APIC" deletes all embedded pictures (cover art) from an
+// ID3v2 file. [ReadUnsupported] reports "APIC" even though pictures are
+// supported via [ReadImage] and [WriteImage], so filter it out unless the
+// user explicitly wants the artwork gone.
+func RemoveUnsupported(path string, descriptors []string) error {
+	if len(descriptors) == 0 {
+		return nil
+	}
+
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("make path abs %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	mod, err := newModule(dir)
+	if err != nil {
+		return fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var out wasmBool
+	if err := mod.call("taglib_file_remove_unsupported", &out, wasmString(wasmPath(path)), wasmStrings(descriptors)); err != nil {
+		return fmt.Errorf("call: %w", err)
+	}
+	if !out {
+		return ErrSavingFile
+	}
+	return nil
+}
+
 // Properties contains the audio properties of a media file.
 type Properties struct {
 	// Format is TagLib's lowercased format name, e.g. flac, mpeg, mp4, ogg, wav
