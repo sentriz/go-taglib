@@ -1,4 +1,5 @@
 //go:build ignore
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -191,10 +192,10 @@ taglib_file_read_properties(const char *filename) {
     return nullptr;
 
   auto audioProperties = file.audioProperties();
-  props->lengthInMilliseconds = audioProperties->lengthInMilliseconds();
-  props->channels = audioProperties->channels();
-  props->sampleRate = audioProperties->sampleRate();
-  props->bitRate = audioProperties->bitrate();
+  props->lengthInMilliseconds = std::max(0, audioProperties->lengthInMilliseconds());
+  props->channels = std::max(0, audioProperties->channels());
+  props->sampleRate = std::max(0, audioProperties->sampleRate());
+  props->bitRate = std::max(0, audioProperties->bitrate());
   extract_format_codec_depth(audioProperties, &props->format, &props->innerCodec, &props->bitsPerSample);
 
   const auto &pictures = file.complexProperties("PICTURE");
