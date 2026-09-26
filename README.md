@@ -14,6 +14,7 @@ To reproduce or verify the bundled binary, see the [attestations](https://github
 - **Read** and **write** embedded images (album artwork) from audio files.
 - Retrieve audio properties such as length, bitrate, sample rate, and channels.
 - Supports multiple audio formats including _MP3_, _FLAC_, _M4A_, _WAV_, _OGG_, _WMA_, and more.
+- Tolerates text that isn't valid UTF-8, such as Windows-1252 written by old taggers, instead of failing to read the file.
 - Safe for concurrent use
 - [Reasonably fast](#performance)
 

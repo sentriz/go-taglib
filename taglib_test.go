@@ -3,6 +3,7 @@ package taglib_test
 import (
 	"bytes"
 	_ "embed"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -193,6 +194,60 @@ func TestReadExistingUnicode(t *testing.T) {
 	nilErr(t, err)
 	eq(t, len(tags[taglib.AlbumArtist]), 1)
 	eq(t, tags[taglib.AlbumArtist][0], "Brian Eno—David Byrne")
+}
+
+func TestReadInvalidUTF8(t *testing.T) {
+	t.Parallel()
+
+	// Vorbis comments must be UTF-8, but old taggers wrote Windows-1252
+	path := tmpf(t, withVorbisComments(t, egFLAC,
+		"ALBUM=Fijaci\xf3n Oral",
+		"TITLE=\x93Quoted\x94 \x80 caf\xe9",
+		"ARTIST=Brian Eno—David Byrne",
+	), "eg.flac")
+
+	tags, err := taglib.ReadTags(path)
+	nilErr(t, err)
+	tagEq(t, tags, map[string][]string{
+		taglib.Album:  {"Fijación Oral"},
+		taglib.Title:  {"“Quoted” € café"},
+		taglib.Artist: {"Brian Eno—David Byrne"},
+	})
+}
+
+func TestWriteInvalidUTF8(t *testing.T) {
+	t.Parallel()
+
+	path := tmpf(t, withVorbisComments(t, egFLAC, "ALBUM=Fijaci\xf3n Oral"), "eg.flac")
+
+	err := taglib.WriteTags(path, map[string][]string{taglib.Title: {"New"}}, 0)
+	nilErr(t, err)
+
+	tags, err := taglib.ReadTags(path)
+	nilErr(t, err)
+	tagEq(t, tags, map[string][]string{
+		taglib.Album: {"Fijación Oral"},
+		taglib.Title: {"New"},
+	})
+
+	// the untouched field was saved back as valid UTF-8
+	b, err := os.ReadFile(path)
+	nilErr(t, err)
+	if !bytes.Contains(b, []byte("ALBUM=Fijación Oral")) {
+		t.Fatalf("album not rewritten as UTF-8")
+	}
+}
+
+func TestReadUnpairedSurrogate(t *testing.T) {
+	t.Parallel()
+
+	// UTF-16LE "A", a high surrogate with no low surrogate after it, "B"
+	path := tmpf(t, withID3v2Title(t, egMP3, []byte{'A', 0, 0x00, 0xd8, 'B', 0}), "eg.mp3")
+
+	tags, err := taglib.ReadTags(path)
+	nilErr(t, err)
+	eq(t, len(tags[taglib.Title]), 1)
+	eq(t, tags[taglib.Title][0], "A�B")
 }
 
 func TestConcurrent(t *testing.T) {
@@ -449,6 +504,60 @@ func tmpf(t testing.TB, b []byte, name string) string {
 	err := os.WriteFile(p, b, os.ModePerm)
 	nilErr(t, err)
 	return p
+}
+
+// withVorbisComments returns flac with its Vorbis comment block replaced by one
+// holding fields as raw bytes, so tests can store text that isn't valid UTF-8.
+func withVorbisComments(t testing.TB, flac []byte, fields ...string) []byte {
+	t.Helper()
+
+	comment := binary.LittleEndian.AppendUint32(nil, 0) // empty vendor string
+	comment = binary.LittleEndian.AppendUint32(comment, uint32(len(fields)))
+	for _, f := range fields {
+		comment = binary.LittleEndian.AppendUint32(comment, uint32(len(f)))
+		comment = append(comment, f...)
+	}
+
+	if string(flac[:4]) != "fLaC" {
+		t.Fatalf("not a flac file")
+	}
+	out := slices.Clone(flac[:4])
+	for pos := 4; ; {
+		header := flac[pos]
+		size := int(flac[pos+1])<<16 | int(flac[pos+2])<<8 | int(flac[pos+3])
+		body := flac[pos+4 : pos+4+size]
+		if header&0x7f == 4 { // VORBIS_COMMENT
+			body = comment
+		}
+		out = append(out, header, byte(len(body)>>16), byte(len(body)>>8), byte(len(body)))
+		out = append(out, body...)
+		pos += 4 + size
+		if header&0x80 != 0 { // last metadata block
+			return append(out, flac[pos:]...)
+		}
+	}
+}
+
+// withID3v2Title returns mp3 with its ID3v2 tag replaced by an ID3v2.3 tag
+// holding a single TIT2 frame of raw UTF-16LE text.
+func withID3v2Title(t testing.TB, mp3 []byte, utf16le []byte) []byte {
+	t.Helper()
+
+	if string(mp3[:3]) != "ID3" {
+		t.Fatalf("no ID3v2 tag")
+	}
+	oldSize := int(mp3[6])<<21 | int(mp3[7])<<14 | int(mp3[8])<<7 | int(mp3[9])
+
+	text := append([]byte{1, 0xff, 0xfe}, utf16le...) // UTF-16 with a little-endian BOM
+	frame := binary.BigEndian.AppendUint32([]byte("TIT2"), uint32(len(text)))
+	frame = append(frame, 0, 0) // frame flags
+	frame = append(frame, text...)
+
+	// header: v2.3, no flags, then the tag size as a syncsafe integer
+	size := len(frame)
+	out := []byte{'I', 'D', '3', 3, 0, 0, byte(size >> 21 & 0x7f), byte(size >> 14 & 0x7f), byte(size >> 7 & 0x7f), byte(size & 0x7f)}
+	out = append(out, frame...)
+	return append(out, mp3[10+oldSize:]...)
 }
 
 func nilErr(t testing.TB, err error) {

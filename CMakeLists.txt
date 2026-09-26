@@ -7,6 +7,11 @@ set(WITH_ZLIB OFF)
 set(BUILD_SHARED_LIBS OFF)
 set(BUILD_TESTING OFF)
 
+# TagLib handles invalid text by catching utfcpp exceptions, which wasm can't
+# do, so hand it a utf8.h whose conversions never throw
+set(CMAKE_DISABLE_FIND_PACKAGE_utf8cpp ON)
+set(utf8cpp_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/utf8-nothrow" CACHE PATH "" FORCE)
+
 add_subdirectory(
   taglib
 )

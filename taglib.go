@@ -135,6 +135,7 @@ const (
 )
 
 // ReadTags reads all metadata tags from an audio file at the given path.
+// Text stored as UTF-8 that isn't valid UTF-8 is decoded as Windows-1252.
 func ReadTags(path string) (map[string][]string, error) {
 	var err error
 	path, err = filepath.Abs(path)
