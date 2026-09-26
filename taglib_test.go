@@ -244,6 +244,29 @@ func TestProperties(t *testing.T) {
 	eq(t, properties.Images[1].MIMEType, "image/jpeg")
 }
 
+func TestPropertiesBitDepth(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		data       []byte
+		innerCodec string
+		bitDepth   uint
+	}{
+		{"eg.m4a", egM4a, "aac", 0},
+		{"eg-alac.m4a", egALACM4a, "alac", 16},
+		{"eg.wma", egWMA, "wma2", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			properties, err := taglib.ReadProperties(tmpf(t, tt.data, tt.name))
+			nilErr(t, err)
+			eq(t, tt.innerCodec, properties.InnerCodec)
+			eq(t, tt.bitDepth, properties.BitDepth)
+		})
+	}
+}
+
 func TestMultiOpen(t *testing.T) {
 	t.Parallel()
 
@@ -426,6 +449,10 @@ var (
 	egMP3 []byte
 	//go:embed testdata/eg.m4a
 	egM4a []byte
+	//go:embed testdata/eg-alac.m4a
+	egALACM4a []byte
+	//go:embed testdata/eg.wma
+	egWMA []byte
 	//go:embed testdata/eg.ogg
 	egOgg []byte
 	//go:embed testdata/eg.wav

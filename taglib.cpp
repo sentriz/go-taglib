@@ -120,22 +120,20 @@ static void extract_format_codec_depth(const TagLib::AudioProperties *ap,
   // containers: codec() picks the inner codec
   if (auto p = dynamic_cast<const MP4::Properties *>(ap)) {
     *format = to_char_array("mp4");
-    *bitsPerSample = p->bitsPerSample();
     switch (p->codec()) {
       case MP4::Properties::AAC:  *innerCodec = to_char_array("aac");  break;
-      case MP4::Properties::ALAC: *innerCodec = to_char_array("alac"); break;
+      case MP4::Properties::ALAC: *innerCodec = to_char_array("alac"); *bitsPerSample = p->bitsPerSample(); break;
       default: break;
     }
     return;
   }
   if (auto p = dynamic_cast<const ASF::Properties *>(ap)) {
     *format = to_char_array("asf");
-    *bitsPerSample = p->bitsPerSample();
     switch (p->codec()) {
       case ASF::Properties::WMA1:         *innerCodec = to_char_array("wma1");         break;
       case ASF::Properties::WMA2:         *innerCodec = to_char_array("wma2");         break;
       case ASF::Properties::WMA9Pro:      *innerCodec = to_char_array("wma9pro");      break;
-      case ASF::Properties::WMA9Lossless: *innerCodec = to_char_array("wma9lossless"); break;
+      case ASF::Properties::WMA9Lossless: *innerCodec = to_char_array("wma9lossless"); *bitsPerSample = p->bitsPerSample(); break;
       default: break;
     }
     return;
