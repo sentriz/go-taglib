@@ -6,6 +6,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(WITH_ZLIB OFF)
 set(BUILD_SHARED_LIBS OFF)
 set(BUILD_TESTING OFF)
+set(utf8cpp_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/utf8-nothrow" CACHE PATH "" FORCE)
 
 add_subdirectory(
   taglib

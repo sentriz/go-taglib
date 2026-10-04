@@ -195,6 +195,33 @@ func TestReadExistingUnicode(t *testing.T) {
 	eq(t, tags[taglib.AlbumArtist][0], "Brian Eno—David Byrne")
 }
 
+func TestInvalidUTF8(t *testing.T) {
+	t.Parallel()
+
+	b, err := os.ReadFile("testdata/invalid-utf8.flac")
+	nilErr(t, err)
+	path := tmpf(t, b, "invalid-utf8.flac")
+
+	tags, err := taglib.ReadTags(path)
+	nilErr(t, err)
+	tagEq(t, tags, map[string][]string{
+		taglib.Artist: {"example artist"},
+	})
+
+	err = taglib.WriteTags(path, map[string][]string{taglib.Title: {"new\xe9"}}, 0)
+	nilErr(t, err)
+}
+
+func TestInvalidUTF16(t *testing.T) {
+	t.Parallel()
+
+	tags, err := taglib.ReadTags("testdata/invalid-utf16.mp3")
+	nilErr(t, err)
+	tagEq(t, tags, map[string][]string{
+		taglib.Artist: {"example artist"},
+	})
+}
+
 func TestConcurrent(t *testing.T) {
 	t.Parallel()
 
