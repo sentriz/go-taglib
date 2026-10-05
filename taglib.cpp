@@ -12,6 +12,7 @@
 #include "ogg/vorbis/vorbisproperties.h"
 #include "ogg/opus/opusproperties.h"
 #include "ogg/speex/speexproperties.h"
+#include "ogg/oggfile.h"
 #include "mp4/mp4properties.h"
 #include "riff/wav/wavproperties.h"
 #include "riff/aiff/aiffproperties.h"
@@ -110,9 +111,10 @@ struct FileProperties {
 // format, inner codec and bit depth all live on the concrete *::Properties subclass, not the
 // base AudioProperties, so downcast once and read them together. names mirror taglib's own,
 // lowercased. bitsPerSample() isn't virtual, hence the per-arm calls.
-static void extract_format_codec_depth(const TagLib::AudioProperties *ap,
+static void extract_format_codec_depth(const TagLib::File *file,
                                        char **format, char **innerCodec, uint32_t *bitsPerSample) {
   using namespace TagLib;
+  const AudioProperties *ap = file->audioProperties();
   *format = nullptr;
   *innerCodec = nullptr;
   *bitsPerSample = 0;
@@ -139,11 +141,16 @@ static void extract_format_codec_depth(const TagLib::AudioProperties *ap,
     return;
   }
 
-  // ogg has one subclass per codec. ogg flac (.oga) reuses FLAC::Properties so it can't be told
-  // apart here and falls through to the flac arm below - fine, we don't ship an .oga fixture
+  // ogg has one subclass per codec, except ogg flac (.oga) which reuses FLAC::Properties so is told apart by its file
   if (dynamic_cast<const Ogg::Vorbis::Properties *>(ap)) { *format = to_char_array("ogg"); *innerCodec = to_char_array("vorbis"); return; }
   if (dynamic_cast<const Ogg::Opus::Properties *>(ap))   { *format = to_char_array("ogg"); *innerCodec = to_char_array("opus");   return; }
   if (dynamic_cast<const Ogg::Speex::Properties *>(ap))  { *format = to_char_array("ogg"); *innerCodec = to_char_array("speex");  return; }
+  if (auto p = dynamic_cast<const FLAC::Properties *>(ap); p && dynamic_cast<const Ogg::File *>(file)) {
+    *format = to_char_array("ogg");
+    *innerCodec = to_char_array("flac");
+    *bitsPerSample = p->bitsPerSample();
+    return;
+  }
 
   // riff: check the format tag rather than assume pcm; compressed wav/aiff-c leaves innerCodec ""
   if (auto p = dynamic_cast<const RIFF::WAV::Properties *>(ap)) {
@@ -173,7 +180,7 @@ static void extract_format_codec_depth(const TagLib::AudioProperties *ap,
   if (auto p = dynamic_cast<const Shorten::Properties *>(ap))   { *format = to_char_array("shorten"); *bitsPerSample = p->bitsPerSample(); return; }
 
   // monolithic lossy: no fixed bit depth
-  if (dynamic_cast<const MPEG::Properties *>(ap)) { *format = to_char_array("mpeg");     return; }
+  if (auto p = dynamic_cast<const MPEG::Properties *>(ap)) { *format = to_char_array(p->isADTS() ? "aac" : "mpeg"); return; }
   if (dynamic_cast<const MPC::Properties *>(ap))  { *format = to_char_array("musepack"); return; }
   // anything else (tracker modules etc.) stays ""
 }
@@ -194,7 +201,7 @@ taglib_file_read_properties(const char *filename) {
   props->channels = std::max(0, audioProperties->channels());
   props->sampleRate = std::max(0, audioProperties->sampleRate());
   props->bitRate = std::max(0, audioProperties->bitrate());
-  extract_format_codec_depth(audioProperties, &props->format, &props->innerCodec, &props->bitsPerSample);
+  extract_format_codec_depth(file.file(), &props->format, &props->innerCodec, &props->bitsPerSample);
 
   const auto &pictures = file.complexProperties("PICTURE");
 

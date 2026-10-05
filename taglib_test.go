@@ -271,23 +271,28 @@ func TestProperties(t *testing.T) {
 	eq(t, properties.Images[1].MIMEType, "image/jpeg")
 }
 
-func TestPropertiesBitDepth(t *testing.T) {
+func TestPropertiesFormat(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name       string
 		data       []byte
+		format     string
 		innerCodec string
 		bitDepth   uint
 	}{
-		{"eg.m4a", egM4a, "aac", 0},
-		{"eg-alac.m4a", egALACM4a, "alac", 16},
-		{"eg.wma", egWMA, "wma2", 0},
+		{"eg.m4a", egM4a, "mp4", "aac", 0},
+		{"eg-alac.m4a", egALACM4a, "mp4", "alac", 16},
+		{"eg.wma", egWMA, "asf", "wma2", 0},
+		{"eg.mp3", egMP3, "mpeg", "", 0},
+		{"eg.aac", egAAC, "aac", "", 0},
+		{"eg.oga", egOGA, "ogg", "flac", 16},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			properties, err := taglib.ReadProperties(tmpf(t, tt.data, tt.name))
 			nilErr(t, err)
+			eq(t, tt.format, properties.Format)
 			eq(t, tt.innerCodec, properties.InnerCodec)
 			eq(t, tt.bitDepth, properties.BitDepth)
 		})
@@ -484,6 +489,10 @@ var (
 	egOgg []byte
 	//go:embed testdata/eg.wav
 	egWAV []byte
+	//go:embed testdata/eg.aac
+	egAAC []byte
+	//go:embed testdata/eg.oga
+	egOGA []byte
 	//go:embed testdata/cover.jpg
 	coverJPG []byte
 )
