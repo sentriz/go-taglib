@@ -356,7 +356,9 @@ var getRuntimeOnce = sync.OnceValues(func() (rc, error) {
 	cacheDir := filepath.Join(os.TempDir(), fmt.Sprintf("go-taglib-wasm-%d", os.Getuid()))
 	compilationCache, err := wazero.NewCompilationCacheWithDir(cacheDir)
 	if err != nil {
-		return rc{}, err
+		// If creating the cache on the filesystem fails,
+		// fall back to an in-memory compilation cache:
+		compilationCache = wazero.NewCompilationCache()
 	}
 
 	runtime := wazero.NewRuntimeWithConfig(ctx,
