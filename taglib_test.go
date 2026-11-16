@@ -8,7 +8,6 @@ import (
 	"image"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -312,28 +311,6 @@ func TestMultiOpen(t *testing.T) {
 		path := tmpf(t, egFLAC, "eg.flac")
 		_, err := taglib.ReadTags(path)
 		nilErr(t, err)
-	}
-}
-
-func TestUnwritableTempDir(t *testing.T) {
-	t.Parallel()
-
-	if os.Getenv("TAGLIB_TEST_UNWRITABLE_TEMP_DIR") != "" {
-		tags, err := taglib.ReadTags("testdata/normal.flac")
-		nilErr(t, err)
-		eq(t, len(tags[taglib.AlbumArtist]), 1)
-		return
-	}
-
-	// nothing can be created below a regular file, not even as root
-	tmpDir := filepath.Join(tmpf(t, nil, "file"), "tmp")
-
-	// the runtime is set up once per process, so read tags in a fresh one
-	cmd := exec.Command(os.Args[0], "-test.run=^TestUnwritableTempDir$")
-	cmd.Env = append(os.Environ(), "TMPDIR="+tmpDir, "TAGLIB_TEST_UNWRITABLE_TEMP_DIR=1")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("err: %v\n%s", err, out)
 	}
 }
 

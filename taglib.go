@@ -351,9 +351,12 @@ type rc struct {
 }
 
 var getRuntimeOnce = sync.OnceValues(func() (rc, error) {
+	return newRuntime(filepath.Join(os.TempDir(), fmt.Sprintf("go-taglib-wasm-%d", os.Getuid())))
+})
+
+func newRuntime(cacheDir string) (rc, error) {
 	ctx := context.Background()
 
-	cacheDir := filepath.Join(os.TempDir(), fmt.Sprintf("go-taglib-wasm-%d", os.Getuid()))
 	compilationCache, err := wazero.NewCompilationCacheWithDir(cacheDir)
 	if err != nil {
 		// If creating the cache on the filesystem fails,
@@ -394,7 +397,7 @@ var getRuntimeOnce = sync.OnceValues(func() (rc, error) {
 		Runtime:        runtime,
 		CompiledModule: compiled,
 	}, nil
-})
+}
 
 type module struct {
 	mod api.Module
