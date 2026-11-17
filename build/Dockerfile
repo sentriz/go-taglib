@@ -1,4 +1,4 @@
-FROM ghcr.io/webassembly/wasi-sdk:wasi-sdk-27
+FROM ghcr.io/webassembly/wasi-sdk:wasi-sdk-33
 
 RUN apt-get update && \
 	apt-get install -y --no-install-recommends curl && \
